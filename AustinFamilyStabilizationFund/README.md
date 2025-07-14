@@ -3,11 +3,11 @@
 ## Project Overview
 Analysis of the impact of unconditional cash transfers on low-income households in Austin, Texas, U.S
 
-## Interactive Reports (Click to View)
-- **[📊 Midline Descriptive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/AustinFamilyStabilizationFund/4a.%20Markdown_MidlineDescriptives.html)** - Interactive HTML report with visualizations
-- **[📈 Baseline-Midline Longitudinal Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/AustinFamilyStabilizationFund/4b.%20Markdown_BaselineMidline_LongitudinalAnalysis.html)** - Complete statistical analysis
-- **[📋 Endline Descriptive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/AustinFamilyStabilizationFund/4c.%20Markdown_EndlineDescriptives.html)** - Final survey wave analysis
-- **[📄 Policy Report (PDF)](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/AustinFamilyStabilizationFund/5.%20PolicyReportMidline.pdf)** - Executive summary for Austin stakeholders
+## Interactive Reports (Click to View Live)
+- **[📊 Midline Descriptive Analysis](https://jasleen1117.github.io/data-analysis-portfolio/AustinFamilyStabilizationFund/4a.%20Markdown_MidlineDescriptives.html)** - Interactive HTML report with visualizations
+- **[📈 Baseline-Midline Longitudinal Analysis](https://jasleen1117.github.io/data-analysis-portfolio/AustinFamilyStabilizationFund/4b.%20Markdown_BaselineMidline_LongitudinalAnalysis.html)** - Complete statistical analysis
+- **[📋 Endline Descriptive Analysis](https://jasleen1117.github.io/data-analysis-portfolio/AustinFamilyStabilizationFund/4c.%20Markdown_EndlineDescriptives.html)** - Final survey wave analysis
+- **[📄 Policy Report (PDF)](https://jasleen1117.github.io/data-analysis-portfolio/AustinFamilyStabilizationFund/5.%20PolicyReportMidline.pdf)** - Executive summary for Austin stakeholders
 
 ## Source Code Files
 - `1a. cleaning_midline.Rmd` - Data cleaning script for midline survey data
@@ -33,18 +33,21 @@ Analysis of the impact of unconditional cash transfers on low-income households 
 - `README.md` - This file with project documentation
 
 ## Key Methods
-- Longitudinal data analysis
-- Advanced data visualization in R
+- Longitudinal data analysis across three survey waves
+- Causal inference techniques for impact evaluation
+- Advanced data visualization and statistical modeling in R
+- Policy-relevant analysis with stakeholder communication
 
 ## Results
 After 6 months of grants, members report improved financial stability, employment gains, increased housing security, and stronger community ties. 
-- The grants are helping members afford daily costs of life in Austin. For the majority of members, paying for basic needs like housing, transportation, food, and family caregiving, is less difficult now than it was at the start of the grants
-- Workforce participation is strong and members have made considerable progress on employment goals. 55% of those who had an employment goal at the start of the grants have found a new job or increased their work hours. 
-- The grants are helping members progress on housing goals, especially around moving, and catching up on housing payments. 44% of those who were behind on rent or mortgage payments at the start of the grants have now caught up. 2 members bought a house!
-- Members report feeling stronger relationships with their community and they have been providing more frequent support, both monetary and non-monetary. The grants have had a ripple effect as members support their family, friends, and neighbors with basic needs. 
+
+**Key Findings:**
+- **Financial Stability**: Grants help members afford daily costs of life in Austin. For the majority, paying for basic needs like housing, transportation, food, and family caregiving is less difficult than at program start
+- **Employment Progress**: 55% of those who had employment goals at program start have found new jobs or increased work hours
+- **Housing Security**: 44% of those behind on rent/mortgage payments at program start have caught up. 2 members bought houses!
+- **Community Impact**: Members report stronger community relationships and provide more frequent support (monetary and non-monetary) to family, friends, and neighbors
 
 ## Survey Variables 
-
 * Identifier & Demographics
 * Income & Employment
 * Housing & Living Situation
@@ -62,3 +65,5 @@ After 6 months of grants, members report improved financial stability, employmen
 * Ripple Effects
 * Program Satisfaction & Feedback
 
+## Data Information
+Raw data files are not included in this repository due to privacy and confidentiality requirements. The analysis code demonstrates the methodological approach and can be adapted for similar datasets.
