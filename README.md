@@ -3,8 +3,8 @@
 PhD in Public Policy from UT Austin with expertise in causal inference, impact evaluation, and survey methodology. 
 Currently working as a Survey Analyst conducting longitudinal analysis of unconditional cash transfer programs. Advanced skills in R programming, experimental design, and policy-relevant data analysis.
 ## Technical Skills
-– **Programming**: R (advanced), STATA (advanced) 
-– **Analysis**: Regression Analysis, Matching Methods, Panel Data Analysis, Time Series, Difference-in-Difference
+- **Programming**: R (advanced), STATA (advanced) 
+- **Analysis**: Regression Analysis, Matching Methods, Panel Data Analysis, Time Series, Difference-in-Difference
 - **Survey Tools**: Qualtrics, SurveyCTO, ODK 
 - **Specialties**: Impact Evaluation, Causal Inference, Mixed Methods Research 
 ## Featured Projects
