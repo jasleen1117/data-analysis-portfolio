@@ -4,9 +4,9 @@
 Analysis of the impact of unconditional cash transfers on youth who were emancipated from the foster system. 
 
 ## Interactive Reports (Click to View)
-- **[📊 Midline Descriptive Analysis](https://jasleen1117.github.io/data-analysis-portfolio/hamilton-county-analysis/2a_Markdown_MidlineDescriptives.html)** - Interactive HTML report with comprehensive descriptive statistics
-- **[📈 Baseline-Midline Longitudinal Analysis](https://jasleen1117.github.io/data-analysis-portfolio/hamilton-county-analysis/2b_Markdown_LongitudinalAnalysis.html)** - Complete longitudinal analysis with causal inference
-- **[📄 Policy Report (PDF)](https://jasleen1117.github.io/data-analysis-portfolio/hamilton-county-analysis/3_PolicyReport.pdf)** - Executive summary for Hamilton County stakeholders
+- **[📊 Midline Descriptive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/hamilton-county-analysis/2a_Markdown_MidlineDescriptives.html)** - Interactive HTML report
+- **[📈 Baseline-Midline Longitudinal Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/hamilton-county-analysis/2b_Markdown_LongitudinalAnalysis.html)** - Complete longitudinal analysis
+- **[📄 Policy Report (PDF)](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/hamilton-county-analysis/3_PolicyReport.pdf)** - Executive summary for Hamilton County stakeholders
 
 ## Files in this folder: 
 - `1_Descriptives_Midline.R` - Descriptive statistics and exploratory analysis for midline survey data 
