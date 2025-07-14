@@ -3,6 +3,13 @@
 ## Project Overview
 Analysis of the impact of unconditional cash transfers on low-income households in Austin, Texas, U.S
 
+## Interactive Reports (Click to View)
+- **[📊 Midline Descriptive Analysis](https://jasleen1117.github.io/data-analysis-portfolio/austin-family-stabilization-fund/4a_Markdown_MidlineDescriptives.html)** - Interactive HTML report with visualizations
+- **[📈 Baseline-Midline Longitudinal Analysis](https://jasleen1117.github.io/data-analysis-portfolio/austin-family-stabilization-fund/4b_Markdown_BaselineMidline_LongitudinalAnalysis.html)** - Complete statistical analysis
+- **[📋 Endline Descriptive Analysis](https://jasleen1117.github.io/data-analysis-portfolio/austin-family-stabilization-fund/4c_Markdown_EndlineDescriptives.html)** - Final survey wave analysis
+- **[📊 Comprehensive Baseline-Midline-Endline Analysis](https://jasleen1117.github.io/data-analysis-portfolio/austin-family-stabilization-fund/b_m_e_analysis.html)** - Full longitudinal analysis report
+- **[📄 Policy Report (PDF)](https://jasleen1117.github.io/data-analysis-portfolio/austin-family-stabilization-fund/5_PolicyReportMidline.pdf)** - Executive summary for Austin stakeholders
+
 ## Files in this folder: 
 
 -`1a_cleaning_midline.R` - Data cleaning script for midline survey data 
