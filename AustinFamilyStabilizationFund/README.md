@@ -4,25 +4,32 @@
 Analysis of the impact of unconditional cash transfers on low-income households in Austin, Texas, U.S
 
 ## Interactive Reports (Click to View)
-- **[📊 Midline Descriptive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/austin-family-stabilization-fund/4a_Markdown_MidlineDescriptives.html)** - Interactive HTML report with visualizations
-- **[📈 Baseline-Midline Longitudinal Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/austin-family-stabilization-fund/4b_Markdown_BaselineMidline_LongitudinalAnalysis.html)** - Complete statistical analysis
-- **[📋 Endline Descriptive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/austin-family-stabilization-fund/4c_Markdown_EndlineDescriptives.html)** - Final survey wave analysis
-- **[📊 Comprehensive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/austin-family-stabilization-fund/b_m_e_analysis.html)** - Full longitudinal analysis report
-- **[📄 Policy Report (PDF)](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/austin-family-stabilization-fund/5_PolicyReportMidline.pdf)** - Executive summary for Austin stakeholders
+- **[📊 Midline Descriptive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/AustinFamilyStabilizationFund/4a.%20Markdown_MidlineDescriptives.html)** - Interactive HTML report with visualizations
+- **[📈 Baseline-Midline Longitudinal Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/AustinFamilyStabilizationFund/4b.%20Markdown_BaselineMidline_LongitudinalAnalysis.html)** - Complete statistical analysis
+- **[📋 Endline Descriptive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/AustinFamilyStabilizationFund/4c.%20Markdown_EndlineDescriptives.html)** - Final survey wave analysis
+- **[📄 Policy Report (PDF)](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/AustinFamilyStabilizationFund/5.%20PolicyReportMidline.pdf)** - Executive summary for Austin stakeholders
 
-## Files in this folder: 
+## Source Code Files
+- `1a. cleaning_midline.Rmd` - Data cleaning script for midline survey data
+- `1b. cleaning_endline.Rmd` - Data cleaning script for endline survey data  
+- `1c. merging_baseline_midline_endline.Rmd` - Script to merge baseline, midline, and endline datasets
+- `2a. Descriptives_midline.Rmd` - Descriptive statistics and exploratory analysis for midline data
+- `2b. Descriptives_endline.Rmd` - Descriptive statistics and exploratory analysis for endline data
+- `3a. MainLongitudinalAnalysis.Rmd` - Main longitudinal analysis code with causal inference methods
+- `3b. Basleine_Midline_LongitudinalAnalysis.Rmd` - Baseline longitudinal analysis comparing pre-intervention data
 
--`1a_cleaning_midline.R` - Data cleaning script for midline survey data 
-- `1b_cleaning_endline.R` - Data cleaning script for endline survey data 
-- `1c_merging_baseline_midline_endline.R` - Script to merge baseline, midline, and endline datasets 
-- `2a_Descriptives_midline.R` - Descriptive statistics and exploratory analysis for midline data 
-- `2b_Descriptives_endline.R` - Descriptive statistics and exploratory analysis for endline data 
-- `3a_MainLongitudinalAnalysis.R` - Main longitudinal analysis code 
-- `3b_Baseline_MidlineLongitudinalAnalysis.R` - Baseline and Midline longitudinal analysis comparing pre-intervention data 
-- `4a_Markdown_MidlineDescriptives.html` - HTML report with midline descriptive analysis 
-- `4b_Markdown_BaselineMidline_LongitudinalAnalysis.html` - HTML report with baseline-midline longitudinal analysis 
-- `4c_Markdown_EndlineDescriptives.html` - HTML report with endline descriptive analysis 
-- `5_PolicyReportMidline.pdf` - Policy report with midline findings for Austin stakeholders 
+## Files in this folder:
+- `1a. cleaning_midline.Rmd` - Data cleaning script for midline survey data
+- `1b. cleaning_endline.Rmd` - Data cleaning script for endline survey data  
+- `1c. merging_baseline_midline_endline.Rmd` - Script to merge baseline, midline, and endline datasets
+- `2a. Descriptives_midline.Rmd` - Descriptive statistics and exploratory analysis for midline data
+- `2b. Descriptives_endline.Rmd` - Descriptive statistics and exploratory analysis for endline data
+- `3a. MainLongitudinalAnalysis.Rmd` - Main longitudinal analysis code with causal inference methods
+- `3b. Basleine_Midline_LongitudinalAnalysis.Rmd` - Baseline longitudinal analysis comparing pre-intervention data
+- `4a. Markdown_MidlineDescriptives.html` - HTML report with midline descriptive analysis
+- `4b. Markdown_BaselineMidline_LongitudinalAnalysis.html` - HTML report with baseline-midline longitudinal analysis
+- `4c. Markdown_EndlineDescriptives.html` - HTML report with endline descriptive analysis
+- `5. PolicyReportMidline.pdf` - Policy report with midline findings for Austin stakeholders
 - `README.md` - This file with project documentation
 
 ## Key Methods
