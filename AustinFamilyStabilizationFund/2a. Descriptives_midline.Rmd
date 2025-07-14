@@ -1,0 +1,1414 @@
+---
+title: "midline_descriptive_statistics"
+author: "Jasleen"
+date: "2025-01-12"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: united
+    highlight: tango
+    code_folding: hide
+    fig_caption: true
+    df_print: paged
+  pdf_document:
+    toc: true
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,          # Don't show code
+  message = FALSE,       # Don't show messages
+  warning = FALSE,       # Don't show warnings
+  fig.align = "center",  # Center figures
+  out.width = "80%",     # Control figure width
+  fig.width = 10,        # Set figure width
+  fig.height = 6         # Set figure height
+)
+```
+
+```{r libraries}
+library(tidyverse)
+library(knitr)
+```
+
+```{r datareading}
+setwd("/Users/marinatolchinsky/Library/CloudStorage/GoogleDrive-marina@uptogether.org/My Drive/Analytics/Hiring, Onboarding & PD/Data for Survey Analyst (Contract)/Jasleen")
+data <- read.csv("midline_survey_final_cleaned.csv", stringsAsFactors = FALSE)
+```
+## Employment {.tabset}
+Analysis of employment status, work hours, and reasons for unemployment among fund members.
+```{r employment}
+## Employment Analysis
+# Function to calculate rounded percentages
+calculate_percentage <- function(count, total) {
+  round(count / total * 100, 0)
+}
+
+# Set default theme for all plots with larger fonts
+theme_larger_text <- theme_minimal() +
+  theme(
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 12, face = "bold")
+  )
+
+theme_set(theme_larger_text)
+
+# 1. Employment Status Distribution
+emp_status_df <- data.frame(
+  Employment_Status = c("Employed", "Unemployed", "Preferred not to answer"),
+  Count = c(
+    sum(data$emp_status_m == "Yes", na.rm = TRUE),
+    sum(data$emp_status_m == "No", na.rm = TRUE),
+    sum(data$emp_status_m == "Prefer not to answer", na.rm = TRUE)
+  )
+)
+
+total_responses <- sum(emp_status_df$Count)
+emp_status_df$Percentage <- calculate_percentage(emp_status_df$Count, total_responses)
+
+# Display the formatted table with sample size
+cat(sprintf("\nEmployment Status Distribution (n=%d):\n", total_responses))
+print(knitr::kable(emp_status_df,
+      format = "simple",
+      col.names = c("Employment Status", "Count", "Percentage (%)"),
+      align = c('l', 'r', 'r')))
+
+# Key findings text summary with larger text
+cat("\nKey Employment Findings:\n")
+cat(sprintf("- %d%% of fund members are employed (%d individuals)\n", 
+    emp_status_df$Percentage[1], emp_status_df$Count[1]))
+cat(sprintf("- %d%% of fund members are unemployed (%d individuals)\n", 
+    emp_status_df$Percentage[2], emp_status_df$Count[2]))
+cat(sprintf("- %d%% preferred not to answer (%d individuals)\n", 
+    emp_status_df$Percentage[3], emp_status_df$Count[3]))
+
+# Analyze unemployment reasons
+unemployed_count <- sum(data$emp_status_m == "No", na.rm = TRUE)
+unemployment_reasons_df <- data.frame(
+  table(data$emp_unemployed_reason_m[data$emp_status_m == "No"])
+)
+names(unemployment_reasons_df) <- c("Reason", "Count")
+unemployment_reasons_df$Percentage <- calculate_percentage(unemployment_reasons_df$Count, 
+                                                        sum(unemployment_reasons_df$Count))
+
+# Display unemployment reasons with sample size
+cat(sprintf("\nReasons for Unemployment (n=%d):\n", unemployed_count))
+print(knitr::kable(unemployment_reasons_df,
+      format = "simple",
+      col.names = c("Reason", "Count", "Percentage (%)"),
+      align = c('l', 'r', 'r')))
+
+# Work hours for employed individuals
+employed_count <- sum(data$emp_status_m == "Yes", na.rm = TRUE)
+work_hours_df <- data.frame(
+  table(data$emp_hours_m[data$emp_status_m == "Yes"])
+)
+names(work_hours_df) <- c("Hours", "Count")
+work_hours_df$Percentage <- calculate_percentage(work_hours_df$Count, 
+                                              sum(work_hours_df$Count))
+
+# Display work hours with sample size
+cat(sprintf("\nWork Hours Distribution (n=%d employed individuals):\n", employed_count))
+print(knitr::kable(work_hours_df,
+      format = "simple",
+      col.names = c("Hours Category", "Count", "Percentage (%)"),
+      align = c('l', 'r', 'r')))
+
+# Hours change analysis
+hours_change_df <- data.frame(
+  table(data$emp_hours_change_m[data$emp_status_m == "Yes"])
+)
+names(hours_change_df) <- c("Change", "Count")
+hours_change_df$Percentage <- calculate_percentage(hours_change_df$Count, 
+                                                sum(hours_change_df$Count))
+table(data$emp_decrease_m)
+
+# Display hours change with sample size
+cat(sprintf("\nChanges in Work Hours (Past 6 Months) (n=%d employed individuals):\n", 
+            employed_count))
+print(knitr::kable(hours_change_df,
+      format = "simple",
+      col.names = c("Change in Hours", "Count", "Percentage (%)"),
+      align = c('l', 'r', 'r')))
+
+# Create a categorized summary of "other" reasons
+reasons_categorized <- data.frame(
+  Category = c(
+    "Health Limitations",
+    "Childcare/Family Responsibilities", 
+    "Loss of Previous Job/Client",
+    "Semi-Retired/Seeking Remote Work",
+    "Other Personal Circumstances"
+  ),
+  Count = c(2, 3, 2, 1, 1)
+)
+
+# Calculate percentages with rounding
+total_other_reasons <- sum(reasons_categorized$Count)
+reasons_categorized$Percentage <- calculate_percentage(reasons_categorized$Count, 
+                                                    total_other_reasons)
+
+# Create simplified table with sample size
+cat(sprintf("\nCategorized 'Other' Reasons for Unemployment (n=%d):\n", total_other_reasons))
+print(knitr::kable(reasons_categorized,
+      col.names = c("Category", "Count", "Percentage (%)"),
+      align = c('l', 'r', 'r'),
+      format = "simple"))
+
+# Create visualization with sample size in title and larger font sizes
+ggplot(reasons_categorized, 
+       aes(x = reorder(Category, -Count), y = Count)) +
+  geom_bar(stat = "identity", fill = "#46214A") +
+  coord_flip() +
+  labs(
+    title = sprintf("Breakdown of 'Other' Reasons for Unemployment (n=%d)", total_other_reasons),
+    x = "",
+    y = "Number of Responses"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.y = element_text(size = 12),  # Specific size for category labels
+    axis.text.x = element_text(size = 12),  # Specific size for count labels
+    plot.margin = margin(20, 20, 20, 20)    # Add more margin around the plot
+  )
+
+# Key findings text
+cat("\nKey Findings from 'Other' Unemployment Reasons:\n")
+cat("- Primary reasons include childcare responsibilities, health limitations, and loss of previous employment")
+cat("- Some respondents are seeking specific work arrangements (e.g., remote work)")
+cat("- Several responses indicate compounding challenges (e.g., childcare + job search difficulties)")
+```
+## Income and Affordability {.tabset}
+Examination of household income, financial difficulties, and methods of meeting expenses.
+```{r income-affordability}
+# Create binary indicators for needs met sources
+data <- data %>%
+  mutate(
+    needs_met_binary = case_when(
+      !is.na(fin_needs_met_m) ~ 1,
+      TRUE ~ 0
+    )
+  )
+
+# 1. Household Income Distribution
+total_responses_income <- sum(!is.na(data$fin_expense_difficulty_m))
+income_dist <- data %>%
+  filter(!is.na(fin_expense_difficulty_m)) %>%
+  count(fin_expense_difficulty_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nHousehold Income Distribution (n=%d):\n", total_responses_income))
+print(knitr::kable(income_dist,
+      col.names = c("Difficulty Level", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 2. Methods of Meeting Spending Needs - Modified for multiple selections with WIC handling
+total_responses_needs <- sum(!is.na(data$fin_needs_met_m))
+
+# Function to properly split responses while preserving WIC
+split_preserve_wic <- function(x) {
+  # Replace the comma in WIC temporarily
+  x <- gsub("Women, Infants, and Children", "Women_Infants_and_Children", x)
+  # Split by comma and space
+  parts <- strsplit(x, ",\\s*")[[1]]
+  # Restore the original WIC text
+  parts <- gsub("Women_Infants_and_Children", "Women, Infants, and Children", parts)
+  return(parts)
+}
+
+# Process each non-NA response
+spending_methods_list <- lapply(data$fin_needs_met_m[!is.na(data$fin_needs_met_m)], split_preserve_wic)
+all_methods <- unlist(spending_methods_list)
+spending_methods <- data.frame(
+  Method = names(table(all_methods)),
+  Count = as.numeric(table(all_methods))
+) %>%
+  mutate(
+    percentage = round(Count/total_responses_needs * 100, 0)
+  ) %>%
+  arrange(desc(percentage))
+
+cat(sprintf("\nMethods Used to Meet Spending Needs (n=%d respondents, multiple selections allowed):\n", 
+            total_responses_needs))
+print(knitr::kable(spending_methods,
+      col.names = c("Method", "Count", "Percentage of Respondents (%)"),
+      format = "simple"))
+
+# 3. Benefits Reduction Analysis
+total_responses_benefits <- sum(!is.na(data$benefits_reduce_m))
+benefits_reduction <- data %>%
+  filter(!is.na(benefits_reduce_m)) %>%
+  count(benefits_reduce_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nExperience with Benefits Reduction (n=%d):\n", total_responses_benefits))
+print(knitr::kable(benefits_reduction,
+      col.names = c("Benefits Status", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 4. Financial Emergencies
+total_responses_emergency <- sum(!is.na(data$fin_emergency_fund_m))
+fin_emergency <- data %>%
+  filter(!is.na(fin_emergency_fund_m)) %>%
+  count(fin_emergency_fund_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nFinancial Emergency Experience (n=%d):\n", total_responses_emergency))
+print(knitr::kable(fin_emergency,
+      col.names = c("Experienced Emergency", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# Key Summary Statistics with corrected metrics
+summary_stats <- data.frame(
+  Metric = c(
+    "Households Reporting Difficulty with Expenses",
+    "Households Using Benefits",
+    "Households Experiencing Financial Emergency",
+    "Households with Benefits Reduction"
+  ),
+  Percentage = c(
+    round(mean(data$fin_expense_difficulty_m %in% 
+              c("Very difficult", "Somewhat difficult"), na.rm = TRUE) * 100, 0),
+    round(mean(data$needs_met_binary, na.rm = TRUE) * 100, 0),
+    round(mean(data$fin_emergency_fund_m == "Yes", na.rm = TRUE) * 100, 0),
+    round(mean(grepl("Yes", data$benefits_reduce_m), na.rm = TRUE) * 100, 0)
+  )
+)
+
+summary_stats$Sample_Size <- c(
+  sum(!is.na(data$fin_expense_difficulty_m)),
+  sum(!is.na(data$fin_needs_met_m)),
+  sum(!is.na(data$fin_emergency_fund_m)),
+  sum(!is.na(data$benefits_reduce_m))
+)
+
+cat("\nKey Income and Affordability Metrics:\n")
+print(knitr::kable(summary_stats,
+      col.names = c("Metric", "Percentage (%)", "Sample Size (n)"),
+      format = "simple"))
+```
+## Housing {.tabset}
+Overview of housing status, cost burden, and mobility patterns.
+```{r housing}
+# 1. Housing Status Distribution with corrected categories
+total_housing_responses <- sum(!is.na(data$house_status_m))
+
+housing_status <- data %>%
+  filter(!is.na(house_status_m)) %>%
+  mutate(
+    house_status_m = case_when(
+      house_status_m == "No fixed residence (e.g., unsheltered, other places not made for housing)" ~ "Homeless",
+      house_status_m == "Temporary housing (e.g., shelter, transitional housing)" ~ "Homeless",
+      TRUE ~ house_status_m
+    )
+  ) %>%
+  count(house_status_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  ) %>%
+  arrange(desc(percentage))
+
+cat(sprintf("\nHousing Status Distribution (n=%d):\n", total_housing_responses))
+print(knitr::kable(housing_status,
+      col.names = c("Housing Status", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 2. Housing Cost Burden
+total_burden_responses <- sum(!is.na(data$house_burden_m))
+cost_burden <- data %>%
+  filter(!is.na(house_burden_m)) %>%
+  count(house_burden_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nHousing Cost Burden (n=%d):\n", total_burden_responses))
+print(knitr::kable(cost_burden,
+      col.names = c("Cost Burden Level", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 3. Payment Status
+total_payment_responses <- sum(!is.na(data$house_payments_behind_m))
+payment_status <- data %>%
+  filter(!is.na(house_payments_behind_m)) %>%
+  count(house_payments_behind_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nHousing Payment Status (n=%d):\n", total_payment_responses))
+print(knitr::kable(payment_status,
+      col.names = c("Payment Status", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 4. Moving Patterns
+total_moving_responses <- sum(!is.na(data$house_moved_m))
+moving_status <- data %>%
+  filter(!is.na(house_moved_m)) %>%
+  count(house_moved_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nMoved in Last 6 Months (n=%d):\n", total_moving_responses))
+print(knitr::kable(moving_status,
+      col.names = c("Moving Status", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# Key Summary Statistics with corrected calculations
+summary_stats <- data.frame(
+  Metric = c(
+    "Renters",
+    "Homeowners",
+    "Experiencing Homelessness",
+    "Severely Cost Burdened (>50% income on housing)",
+    "Moved in Past 6 Months",
+    "Behind on Payments"
+  ),
+  Percentage = c(
+    round(mean(data$house_status_m == "Rented", na.rm = TRUE) * 100, 0),
+    round(mean(stringr::str_detect(data$house_status_m, "Owned by you"), na.rm = TRUE) * 100, 0),
+    round(mean(data$house_status_m %in% c(
+      "No fixed residence (e.g., unsheltered, other places not made for housing)",
+      "Temporary housing (e.g., shelter, transitional housing)"
+    ), na.rm = TRUE) * 100, 0),
+    round(mean(data$house_burden_m == "More than 50% of monthly income", na.rm = TRUE) * 100, 0),
+    round(mean(data$house_moved_m == "Yes", na.rm = TRUE) * 100, 0),
+    round(mean(data$house_payments_behind_m == "Yes", na.rm = TRUE) * 100, 0)
+  )
+)
+
+# Add sample sizes
+summary_stats$Sample_Size <- c(
+  sum(!is.na(data$house_status_m)),
+  sum(!is.na(data$house_status_m)),
+  sum(!is.na(data$house_status_m)),
+  sum(!is.na(data$house_burden_m)),
+  sum(!is.na(data$house_moved_m)),
+  sum(!is.na(data$house_payments_behind_m))
+)
+
+cat("\nKey Housing Metrics:\n")
+print(knitr::kable(summary_stats,
+      col.names = c("Metric", "Percentage (%)", "Sample Size (n)"),
+      format = "simple"))
+
+# Additional analysis of moving reasons for those who moved
+if(sum(data$house_moved_m == "Yes", na.rm = TRUE) > 0) {
+  total_movers <- sum(data$house_moved_m == "Yes", na.rm = TRUE)
+  cat(sprintf("\nReasons for Moving (among those who moved) (n=%d):\n", total_movers))
+  move_reasons <- data %>%
+    filter(house_moved_m == "Yes") %>%
+    filter(!is.na(house_move_reason_m)) %>%
+    count(house_move_reason_m) %>%
+    mutate(
+      percentage = round(n/sum(n) * 100, 0)
+    )
+  print(knitr::kable(move_reasons,
+        col.names = c("Reason", "Count", "Percentage (%)"),
+        format = "simple"))
+}
+```
+## Childcare {.tabset}
+Analysis of childcare responsibilities, arrangements, and challenges.
+
+```{r,}
+# 1. Childcare Responsibilities
+total_childcare_resp <- sum(!is.na(data$cc_has_children_m))
+childcare_resp <- data %>%
+  filter(!is.na(cc_has_children_m)) %>%
+  count(cc_has_children_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nChildcare Responsibilities (n=%d):\n", total_childcare_resp))
+print(knitr::kable(childcare_resp,
+      col.names = c("Has Childcare Responsibilities", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 2. Age Range of Children - Modified for multiple selections
+total_age_range_resp <- sum(!is.na(data$cc_age_range_m))
+
+# Split and count age ranges
+split_age_ranges <- function(x) {
+  if(is.na(x)) return(NULL)
+  ranges <- unlist(strsplit(x, ",\\s*"))
+  return(trimws(ranges))
+}
+
+age_range_responses <- data$cc_age_range_m[!is.na(data$cc_age_range_m)]
+all_age_ranges <- unlist(lapply(age_range_responses, split_age_ranges))
+
+age_range <- data.frame(
+  Age_Range = names(table(all_age_ranges)),
+  Count = as.numeric(table(all_age_ranges))
+) %>%
+  mutate(
+    percentage = round(Count/total_age_range_resp * 100, 0)  # Percentage based on total respondents
+  ) %>%
+  arrange(desc(Count))
+
+cat(sprintf("\nAge Range of Children (n=%d respondents, multiple selections allowed):\n", 
+            total_age_range_resp))
+print(knitr::kable(age_range,
+      col.names = c("Age Range", "Count", "Percentage of Respondents (%)"),
+      format = "simple"))
+
+# 3. Childcare Situation Changes
+total_situation_changes <- sum(!is.na(data$cc_arrangement_m))
+situation_changes <- data %>%
+  filter(!is.na(cc_arrangement_m)) %>%
+  count(cc_arrangement_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nChildcare Situation Changes (n=%d):\n", total_situation_changes))
+print(knitr::kable(situation_changes,
+      col.names = c("Change in Situation", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 4. Enrollment Status for Under 5
+total_under5 <- sum(!is.na(data$cc_under5_care_m))
+under5_enrollment <- data %>%
+  filter(!is.na(cc_under5_care_m)) %>%
+  count(cc_under5_care_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nEnrollment Status for Children Under 5 (n=%d):\n", total_under5))
+print(knitr::kable(under5_enrollment,
+      col.names = c("Enrollment Status", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# For those who reported better childcare situation
+if(sum(!is.na(data$childcare_better_m)) > 0) {
+  total_better_resp <- sum(!is.na(data$childcare_better_m))
+  
+  # Function to split improvements
+  split_improvements <- function(x) {
+    if(is.na(x)) return(NULL)
+    improvements <- unlist(strsplit(x, ",\\s*"))
+    return(trimws(improvements))
+  }
+  
+  # Process each response and count individual improvements
+  better_responses <- data$childcare_better_m[!is.na(data$childcare_better_m)]
+  all_improvements <- unlist(lapply(better_responses, split_improvements))
+  
+  better_situation <- data.frame(
+    Improvement = names(table(all_improvements)),
+    Count = as.numeric(table(all_improvements))
+  ) %>%
+    mutate(
+      percentage = round(Count/total_better_resp * 100, 0)  # Percentage based on total respondents
+    ) %>%
+    arrange(desc(Count))
+    
+  cat(sprintf("\nImprovements in Childcare Situation (n=%d respondents, multiple selections allowed):\n", 
+              total_better_resp))
+  print(knitr::kable(better_situation,
+        col.names = c("Type of Improvement", "Count", "Percentage of Respondents (%)"),
+        format = "simple"))
+}
+
+# For those who reported worse childcare situation
+if(sum(!is.na(data$childcare_worse_m)) > 0) {
+  total_worse_resp <- sum(!is.na(data$childcare_worse_m))
+  
+  # Function to split responses while preserving commas within the same challenge
+  split_challenges <- function(x) {
+    if(is.na(x)) return(NULL)
+    challenges <- unlist(strsplit(x, ",(?=[^,]+$)", perl=TRUE))
+    return(trimws(challenges))
+  }
+  
+  # Process each response and count individual challenges
+  worse_responses <- data$childcare_worse_m[!is.na(data$childcare_worse_m)]
+  all_challenges <- unlist(lapply(worse_responses, split_challenges))
+  
+  worse_situation <- data.frame(
+    Challenge = names(table(all_challenges)),
+    Count = as.numeric(table(all_challenges))
+  ) %>%
+    mutate(
+      percentage = round(Count/total_worse_resp * 100, 0)  # Percentage based on total respondents
+    ) %>%
+    arrange(desc(Count))
+    
+  cat(sprintf("\nChallenges in Childcare Situation (n=%d respondents, multiple selections allowed):\n", 
+              total_worse_resp))
+  print(knitr::kable(worse_situation,
+        col.names = c("Type of Challenge", "Count", "Percentage of Respondents (%)"),
+        format = "simple"))
+}
+
+# Key Summary Statistics
+summary_stats <- data.frame(
+  Metric = c(
+    "Members with Childcare Responsibilities",
+    "Members with Children Under 5",
+    "Members Reporting Better Childcare Situation",
+    "Members Reporting Worse Childcare Situation"
+  ),
+  Percentage = c(
+    round(mean(data$cc_has_children_m == "Yes", na.rm = TRUE) * 100, 0),
+    round(mean(grepl("under 5", data$cc_age_range_m, ignore.case = TRUE), na.rm = TRUE) * 100, 0),
+    round(mean(data$cc_arrangement_m == "My childcare situation is BETTER", na.rm = TRUE) * 100, 0),
+    round(mean(data$cc_arrangement_m == "My childcare situation is WORSE", na.rm = TRUE) * 100, 0)
+  )
+)
+
+# Add sample sizes to summary stats
+summary_stats$Sample_Size <- c(
+  sum(!is.na(data$cc_has_children_m)),
+  sum(!is.na(data$cc_age_range_m)),
+  sum(!is.na(data$cc_arrangement_m)),
+  sum(!is.na(data$cc_arrangement_m))
+)
+
+cat("\nKey Childcare Metrics:\n")
+print(knitr::kable(summary_stats,
+      col.names = c("Metric", "Percentage (%)", "Sample Size (n)"),
+      format = "simple"))
+```
+## Goals {.tabset}
+Examination of members' goals, priorities, and progress.
+
+```{r goals}
+# 1. Overall Goals Analysis
+total_goals_resp <- sum(!is.na(data$goals_m))
+goals_overall <- data %>%
+  filter(!is.na(goals_m)) %>%
+  count(goals_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nPresence of Goals/Aspirations (n=%d):\n", total_goals_resp))
+print(knitr::kable(goals_overall,
+      col.names = c("Has Goals", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 2. Goal Priorities - Single clean output
+total_priorities_resp <- sum(!is.na(data$goal_priority_m))
+
+# Define the exact predefined categories
+predefined_categories <- c(
+    "Managing and improving my housing situation (e.g., covering costs, moving, making repairs)",
+    "Changing my employment status (e.g., switching jobs, increasing/decreasing working hours, or starting a business)",
+    "Continuing or starting education (e.g., a degree, certificate, or training)",
+    "Paying down debt and/or catching up on bills",
+    "Saving for the future",
+    "Improving my transportation situation (e.g., car repairs, buying a car, etc.)",
+    "Other (please specify)"
+)
+
+# Process the priorities
+priorities_data <- data %>%
+  filter(!is.na(goal_priority_m)) %>%
+  mutate(goal_priority_m = as.character(goal_priority_m))
+
+all_priorities <- vector("character")
+for(response in priorities_data$goal_priority_m) {
+    for(category in predefined_categories) {
+        if(grepl(category, response, fixed=TRUE)) {
+            all_priorities <- c(all_priorities, category)
+        }
+    }
+}
+
+# Create the summary table (single output)
+priorities <- data.frame(
+    Goal_Category = names(table(all_priorities)),
+    Count = as.numeric(table(all_priorities))
+) %>%
+    mutate(
+        percentage = round(Count/total_priorities_resp * 100, 0)
+    ) %>%
+    arrange(desc(Count))
+
+# Single print of goal priorities
+cat(sprintf("\nTop Goal Priorities (n=%d respondents, multiple selections allowed):\n", 
+            total_priorities_resp))
+print(knitr::kable(priorities,
+      col.names = c("Goal Category", "Count", "Percentage of Respondents (%)"),
+      format = "simple"))
+
+
+# 3. Debt Goals Analysis - Modified for multiple selections
+total_debt_resp <- sum(!is.na(data$goals_debt_m))
+
+# Function to split and clean debt types
+split_debt_types <- function(x) {
+  if(is.na(x)) return(NULL)
+  types <- unlist(strsplit(as.character(x), ",\\s*"))
+  return(trimws(types))
+}
+
+# Process debt responses
+debt_responses <- data$goals_debt_m[!is.na(data$goals_debt_m)]
+all_debt_types <- unlist(lapply(debt_responses, split_debt_types))
+
+debt_goals <- data.frame(
+  Debt_Type = names(table(all_debt_types)),
+  Count = as.numeric(table(all_debt_types))
+) %>%
+  mutate(
+    percentage = round(Count/total_debt_resp * 100, 0)
+  ) %>%
+  arrange(desc(Count))
+
+cat(sprintf("\nDebt Management Goals (n=%d respondents, multiple selections allowed):\n", total_debt_resp))
+print(knitr::kable(debt_goals,
+      col.names = c("Type of Debt", "Count", "Percentage of Respondents (%)"),
+      format = "simple"))
+
+# 4. Savings Goals - Modified for exact predefined categories
+total_savings_resp <- sum(!is.na(data$goals_save_m))
+
+# Define exact predefined savings categories
+savings_categories <- c(
+    "Retirement",
+    "Buying a home",
+    "Education (your own or someone else's)",
+    "Leisure and Personal Well-being (e.g., hobbies, therapy, self-care)",
+    "Emergency fund",
+    "Health-related expenses",
+    "Major purchases (like a car or appliances)",
+    "Starting or expanding a business",
+    "Supporting family needs (e.g., caregiving)",
+    "Family vacations or activities",
+    "Other (please specify)"
+)
+
+# Process savings responses with exact category matching
+savings_responses <- data$goals_save_m[!is.na(data$goals_save_m)]
+all_savings_goals <- vector("character")
+
+for(response in savings_responses) {
+    for(category in savings_categories) {
+        if(grepl(category, response, fixed=TRUE)) {
+            all_savings_goals <- c(all_savings_goals, category)
+        }
+    }
+}
+
+savings_goals <- data.frame(
+    Savings_Goal = names(table(all_savings_goals)),
+    Count = as.numeric(table(all_savings_goals))
+) %>%
+    mutate(
+        percentage = round(Count/total_savings_resp * 100, 0)
+    ) %>%
+    arrange(desc(Count))
+
+cat(sprintf("\nSavings Goals (n=%d respondents, multiple selections allowed):\n", total_savings_resp))
+print(knitr::kable(savings_goals,
+      col.names = c("Type of Savings Goal", "Count", "Percentage of Respondents (%)"),
+      format = "simple"))
+
+# 5. Key Summary Statistics
+summary_stats <- data.frame(
+  Metric = c(
+    "Members with Specific Goals",
+    "Members with Debt Management Goals",
+    "Members with Savings Goals",
+    "Members with Housing Goals",
+    "Members with Employment Goals",
+    "Members with Education Goals",
+    "Members Finding Goals Easy to Achieve"
+  ),
+  Percentage = c(
+    round(mean(data$goals_m == "Yes", na.rm = TRUE) * 100, 0),
+    round(mean(!is.na(data$goals_debt_m) & data$goals_debt_m != "", na.rm = TRUE) * 100, 0),
+    round(mean(!is.na(data$goals_save_m) & data$goals_save_m != "", na.rm = TRUE) * 100, 0),
+    round(mean(!is.na(data$goal_housing_m) & data$goal_housing_m != "", na.rm = TRUE) * 100, 0),
+    round(mean(!is.na(data$goal_employment_m) & data$goal_employment_m != "", na.rm = TRUE) * 100, 0),
+    round(mean(!is.na(data$goal_education_m) & data$goal_education_m != "", na.rm = TRUE) * 100, 0),
+    round(mean(grepl("easy", tolower(data$goals_debt_easy_hard_m)), na.rm = TRUE) * 100, 0)
+  )
+)
+
+# Add sample sizes
+summary_stats$Sample_Size <- c(
+  sum(!is.na(data$goals_m)),
+  sum(!is.na(data$goals_debt_m)),
+  sum(!is.na(data$goals_save_m)),
+  sum(!is.na(data$goal_housing_m)),
+  sum(!is.na(data$goal_employment_m)),
+  sum(!is.na(data$goal_education_m)),
+  sum(!is.na(data$goals_debt_easy_hard_m))
+)
+
+cat("\nKey Goals and Financial Metrics:\n")
+print(knitr::kable(summary_stats,
+      col.names = c("Metric", "Percentage (%)", "Sample Size (n)"),
+      format = "simple"))
+
+table(data$goals_debt_easier_m)
+table(data$goals_debt_harder_m)
+table(data$goals_debt_easy_hard_m)
+
+```
+
+## Health {.tabset}
+Analysis of physical health, mental health, and food security status.
+
+```{r health}
+# 1. General Health Status
+total_health_resp <- sum(!is.na(data$wb_health_status_m))
+health_status <- data %>%
+  filter(!is.na(wb_health_status_m)) %>%
+  count(wb_health_status_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nGeneral Health Status (n=%d):\n", total_health_resp))
+print(knitr::kable(health_status,
+      col.names = c("Health Status", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 2. Mental Health Analysis using both indicators
+wellbeing_severity <- data %>%
+  mutate(
+    Anxiety = case_when(
+      wb_anxious_m == "Nearly every day" | wb_worry_m == "Nearly every day" ~ "Severe",
+      wb_anxious_m == "More than half the days" | wb_worry_m == "More than half the days" ~ "Moderate",
+      wb_anxious_m == "Several days" | wb_worry_m == "Several days" ~ "Mild",
+      TRUE ~ "None"
+    ),
+    Depression = case_when(
+      wb_interest_m == "Nearly every day" | wb_down_m == "Nearly every day" ~ "Severe",
+      wb_interest_m == "More than half the days" | wb_down_m == "More than half the days" ~ "Moderate",
+      wb_interest_m == "Several days" | wb_down_m == "Several days" ~ "Mild",
+      TRUE ~ "None"
+    )
+  ) %>%
+  summarise(
+    Anxiety_Severe = sum(Anxiety == "Severe", na.rm = TRUE),
+    Anxiety_Moderate = sum(Anxiety == "Moderate", na.rm = TRUE),
+    Anxiety_Mild = sum(Anxiety == "Mild", na.rm = TRUE),
+    Anxiety_None = sum(Anxiety == "None", na.rm = TRUE),
+    Depression_Severe = sum(Depression == "Severe", na.rm = TRUE),
+    Depression_Moderate = sum(Depression == "Moderate", na.rm = TRUE),
+    Depression_Mild = sum(Depression == "Mild", na.rm = TRUE),
+    Depression_None = sum(Depression == "None", na.rm = TRUE)
+  )
+
+# Convert to long format for visualization
+wellbeing_long <- wellbeing_severity %>%
+  pivot_longer(cols = everything(), names_to = c("Condition", "Severity"), names_sep = "_") %>%
+  mutate(
+    Severity = factor(Severity, 
+                     levels = c("None", "Mild", "Moderate", "Severe")),
+    Condition = recode(Condition, 
+                      "Anxiety" = "Anxiety",
+                      "Depression" = "Depression")
+  ) %>%
+  group_by(Condition) %>%
+  mutate(
+    Percentage = round(value / sum(value) * 100, 0)
+  ) %>%
+  ungroup()
+
+# Display detailed breakdown
+cat("\nDetailed Mental Health Breakdown:\n")
+print(knitr::kable(wellbeing_long %>% 
+                   arrange(Condition, desc(Severity)),
+      col.names = c("Condition", "Severity", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# Create visualization
+well_plot <- ggplot(wellbeing_long, aes(x = Severity, y = Percentage, fill = Severity)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ Condition, scales = "free_y", ncol = 1) +
+  scale_fill_manual(values = c("None" = "#dfd8e0", 
+                              "Mild" = "#9f8da3", 
+                              "Moderate" = "#664a6a", 
+                              "Severe" = "#46214a")) +
+  labs(x = "Severity", 
+       y = "Percent of Members",
+       title = sprintf("Mental Health Severity (n=%d)", 
+                      sum(!is.na(data$wb_anxious_m)))) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14),
+    strip.text = element_text(size = 14),
+    plot.title = element_text(size = 16, hjust = 0.5),
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank()
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+
+print(well_plot)
+
+# 3. Food Insufficiency Status
+total_food_resp <- sum(!is.na(data$wb_food_security_m))
+food_insufficiency <- data %>%
+  filter(!is.na(wb_food_security_m)) %>%
+  count(wb_food_security_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+cat(sprintf("\nFood Insufficiency Status (n=%d):\n", total_food_resp))
+print(knitr::kable(food_insufficiency,
+      col.names = c("Food Insufficiency Status", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 4. Key Summary Statistics
+summary_stats <- data.frame(
+  Metric = c(
+    "Good or Better Health",
+    "Experiencing Moderate/Severe Anxiety",
+    "Experiencing Moderate/Severe Depression",
+    "Food Insufficiency",
+    "Severe Food Insufficiency"
+  ),
+  Percentage = c(
+    round(mean(data$wb_health_status_m %in% 
+               c("Good", "Very good", "Excellent"), na.rm = TRUE) * 100, 0),
+    round(mean(wellbeing_long$Percentage[wellbeing_long$Condition == "Anxiety" & 
+                                       wellbeing_long$Severity %in% 
+                                       c("Moderate", "Severe")]), 0),
+    round(mean(wellbeing_long$Percentage[wellbeing_long$Condition == "Depression" & 
+                                       wellbeing_long$Severity %in% 
+                                       c("Moderate", "Severe")]), 0),
+    round(mean(grepl("not enough", data$wb_food_security_m, 
+                     ignore.case = TRUE), na.rm = TRUE) * 100, 0),
+    round(mean(data$wb_food_security_m == 
+               "Often not enough to eat", na.rm = TRUE) * 100, 0)
+  )
+)
+
+# Add sample sizes
+summary_stats$Sample_Size <- c(
+  sum(!is.na(data$wb_health_status_m)),
+  sum(!is.na(data$wb_anxious_m)),
+  sum(!is.na(data$wb_down_m)),
+  sum(!is.na(data$wb_food_security_m)),
+  sum(!is.na(data$wb_food_security_m))
+)
+
+cat("\nKey Wellbeing Metrics:\n")
+print(knitr::kable(summary_stats,
+      col.names = c("Metric", "Percentage (%)", "Sample Size (n)"),
+      format = "simple"))
+```
+
+## Health {.tabset}
+Analysis of physical health, mental health, and food security status.
+
+```{r health}
+# 1. General Health Status (Health Perception)
+total_health_resp <- sum(!is.na(data$wb_health_status_e))
+health_status <- data %>%
+  filter(!is.na(wb_health_status_e)) %>%
+  count(wb_health_status_e) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0),
+    # Create ordered factor for better sorting
+    wb_health_status_e = factor(wb_health_status_e, 
+                               levels = c("Excellent", "Very good", "Good", "Fair", "Poor"))
+  ) %>%
+  arrange(wb_health_status_e)
+
+cat(sprintf("\nGeneral Health Status (n=%d):\n", total_health_resp))
+print(knitr::kable(health_status,
+      col.names = c("Health Status", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 2. Mental Health Analysis using both indicators
+wellbeing_severity <- data %>%
+  mutate(
+    Anxiety = case_when(
+      wb_anxious_e == "Nearly every day" | wb_worry_e == "Nearly every day" ~ "Severe",
+      wb_anxious_e == "More than half the days" | wb_worry_e == "More than half the days" ~ "Moderate",
+      wb_anxious_e == "Several days" | wb_worry_e == "Several days" ~ "Mild",
+      TRUE ~ "None"
+    ),
+    Depression = case_when(
+      wb_interest_e == "Nearly every day" | wb_down_e == "Nearly every day" ~ "Severe",
+      wb_interest_e == "More than half the days" | wb_down_e == "More than half the days" ~ "Moderate",
+      wb_interest_e == "Several days" | wb_down_e == "Several days" ~ "Mild",
+      TRUE ~ "None"
+    )
+  ) %>%
+  summarise(
+    Anxiety_Severe = sum(Anxiety == "Severe", na.rm = TRUE),
+    Anxiety_Moderate = sum(Anxiety == "Moderate", na.rm = TRUE),
+    Anxiety_Mild = sum(Anxiety == "Mild", na.rm = TRUE),
+    Anxiety_None = sum(Anxiety == "None", na.rm = TRUE),
+    Depression_Severe = sum(Depression == "Severe", na.rm = TRUE),
+    Depression_Moderate = sum(Depression == "Moderate", na.rm = TRUE),
+    Depression_Mild = sum(Depression == "Mild", na.rm = TRUE),
+    Depression_None = sum(Depression == "None", na.rm = TRUE)
+  )
+
+# Convert to long format for visualization
+wellbeing_long <- wellbeing_severity %>%
+  pivot_longer(cols = everything(), names_to = c("Condition", "Severity"), names_sep = "_") %>%
+  mutate(
+    Severity = factor(Severity, 
+                     levels = c("None", "Mild", "Moderate", "Severe")),
+    Condition = recode(Condition, 
+                      "Anxiety" = "Anxiety",
+                      "Depression" = "Depression")
+  ) %>%
+  group_by(Condition) %>%
+  mutate(
+    Percentage = round(value / sum(value) * 100, 0)
+  ) %>%
+  ungroup()
+
+# Display detailed breakdown
+cat("\nDetailed Mental Health Breakdown:\n")
+print(knitr::kable(wellbeing_long %>% 
+                   arrange(Condition, desc(Severity)),
+      col.names = c("Condition", "Severity", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# Create mental health visualization with brand colors
+well_plot <- ggplot(wellbeing_long, aes(x = Severity, y = Percentage, fill = Severity)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ Condition, scales = "free_y", ncol = 1) +
+  scale_fill_manual(values = c("None" = "#FF8C00",      # Orange (positive)
+                              "Mild" = "#5E2D91",       # Purple variant 
+                              "Moderate" = "#D70073",   # Pink (moderate concern)
+                              "Severe" = "#46214A")) +  # Main brand (severe concern)
+  labs(x = "Severity", 
+       y = "Percent of Members",
+       title = sprintf("Mental Health Severity (n=%d)", 
+                      sum(!is.na(data$wb_anxious_e)))) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14),
+    strip.text = element_text(size = 14),
+    plot.title = element_text(size = 16, hjust = 0.5),
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank()
+  ) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1))
+
+print(well_plot)
+
+# 3. Individual Mental Health Components Analysis
+# Anxiety symptoms
+total_anxiety_resp <- sum(!is.na(data$wb_anxious_e))
+if(total_anxiety_resp > 0) {
+  anxiety_breakdown <- data %>%
+    filter(!is.na(wb_anxious_e)) %>%
+    count(wb_anxious_e) %>%
+    mutate(
+      percentage = round(n/sum(n) * 100, 0)
+    ) %>%
+    arrange(desc(percentage))
+  
+  cat(sprintf("\nAnxiety Symptoms (Feeling nervous, anxious or on edge) (n=%d):\n", total_anxiety_resp))
+  print(knitr::kable(anxiety_breakdown,
+        col.names = c("Frequency", "Count", "Percentage (%)"),
+        format = "simple"))
+}
+
+# Worry symptoms
+total_worry_resp <- sum(!is.na(data$wb_worry_e))
+if(total_worry_resp > 0) {
+  worry_breakdown <- data %>%
+    filter(!is.na(wb_worry_e)) %>%
+    count(wb_worry_e) %>%
+    mutate(
+      percentage = round(n/sum(n) * 100, 0)
+    ) %>%
+    arrange(desc(percentage))
+  
+  cat(sprintf("\nWorry Symptoms (Not being able to stop or control worrying) (n=%d):\n", total_worry_resp))
+  print(knitr::kable(worry_breakdown,
+        col.names = c("Frequency", "Count", "Percentage (%)"),
+        format = "simple"))
+}
+
+# Depression symptoms - lack of interest
+total_interest_resp <- sum(!is.na(data$wb_interest_e))
+if(total_interest_resp > 0) {
+  interest_breakdown <- data %>%
+    filter(!is.na(wb_interest_e)) %>%
+    count(wb_interest_e) %>%
+    mutate(
+      percentage = round(n/sum(n) * 100, 0)
+    ) %>%
+    arrange(desc(percentage))
+  
+  cat(sprintf("\nLack of Interest (Little interest or pleasure in doing things) (n=%d):\n", total_interest_resp))
+  print(knitr::kable(interest_breakdown,
+        col.names = c("Frequency", "Count", "Percentage (%)"),
+        format = "simple"))
+}
+
+# Depression symptoms - feeling down
+total_down_resp <- sum(!is.na(data$wb_down_e))
+if(total_down_resp > 0) {
+  down_breakdown <- data %>%
+    filter(!is.na(wb_down_e)) %>%
+    count(wb_down_e) %>%
+    mutate(
+      percentage = round(n/sum(n) * 100, 0)
+    ) %>%
+    arrange(desc(percentage))
+  
+  cat(sprintf("\nDepressive Feelings (Feeling down, depressed, or hopeless) (n=%d):\n", total_down_resp))
+  print(knitr::kable(down_breakdown,
+        col.names = c("Frequency", "Count", "Percentage (%)"),
+        format = "simple"))
+}
+
+# 4. Food Security Status
+total_food_resp <- sum(!is.na(data$wb_food_security_e))
+if(total_food_resp > 0) {
+  food_security <- data %>%
+    filter(!is.na(wb_food_security_e)) %>%
+    count(wb_food_security_e) %>%
+    mutate(
+      percentage = round(n/sum(n) * 100, 0)
+    ) %>%
+    arrange(desc(percentage))
+  
+  cat(sprintf("\nFood Security Status (n=%d):\n", total_food_resp))
+  print(knitr::kable(food_security,
+        col.names = c("Food Security Status", "Count", "Percentage (%)"),
+        format = "simple"))
+}
+
+# 5. Key Summary Statistics
+summary_stats <- data.frame(
+  Metric = c(
+    "Good or Better Health",
+    "Fair or Poor Health",
+    "Experiencing Moderate/Severe Anxiety",
+    "Experiencing Moderate/Severe Depression",
+    "Food Insecurity (Any Level)",
+    "Severe Food Insecurity",
+    "Excellent Mental Health (No Symptoms)"
+  ),
+  Percentage = c(
+    round(mean(data$wb_health_status_e %in% 
+               c("Good", "Very good", "Excellent"), na.rm = TRUE) * 100, 0),
+    round(mean(data$wb_health_status_e %in% 
+               c("Fair", "Poor"), na.rm = TRUE) * 100, 0),
+    ifelse(nrow(wellbeing_long) > 0,
+           round(sum(wellbeing_long$value[wellbeing_long$Condition == "Anxiety" & 
+                                        wellbeing_long$Severity %in% 
+                                        c("Moderate", "Severe")]) / 
+                 sum(wellbeing_long$value[wellbeing_long$Condition == "Anxiety"]) * 100, 0), 0),
+    ifelse(nrow(wellbeing_long) > 0,
+           round(sum(wellbeing_long$value[wellbeing_long$Condition == "Depression" & 
+                                        wellbeing_long$Severity %in% 
+                                        c("Moderate", "Severe")]) / 
+                 sum(wellbeing_long$value[wellbeing_long$Condition == "Depression"]) * 100, 0), 0),
+    round(mean(grepl("not enough|Sometimes not enough", data$wb_food_security_e, 
+                     ignore.case = TRUE), na.rm = TRUE) * 100, 0),
+    round(mean(grepl("Often not enough", data$wb_food_security_e, 
+                     ignore.case = TRUE), na.rm = TRUE) * 100, 0),
+    ifelse(nrow(wellbeing_long) > 0,
+           round(mean(wellbeing_long$value[wellbeing_long$Severity == "None"]) / 
+                 sum(wellbeing_long$value) * 100, 0), 0)
+  )
+)
+
+# Add sample sizes
+summary_stats$Sample_Size <- c(
+  sum(!is.na(data$wb_health_status_e)),
+  sum(!is.na(data$wb_health_status_e)),
+  sum(!is.na(data$wb_anxious_e)),
+  sum(!is.na(data$wb_down_e)),
+  sum(!is.na(data$wb_food_security_e)),
+  sum(!is.na(data$wb_food_security_e)),
+  sum(!is.na(data$wb_anxious_e))
+)
+
+cat("\nKey Health and Wellbeing Metrics:\n")
+print(knitr::kable(summary_stats,
+      col.names = c("Metric", "Percentage (%)", "Sample Size (n)"),
+      format = "simple"))
+
+# 6. Health Status Categories Summary
+if(total_health_resp > 0) {
+  positive_health <- sum(data$wb_health_status_e %in% c("Excellent", "Very good", "Good"), na.rm = TRUE)
+  concerning_health <- sum(data$wb_health_status_e %in% c("Fair", "Poor"), na.rm = TRUE)
+  
+  cat(sprintf("\nOverall Health Status Summary:\n"))
+  cat(sprintf("- Positive Health (Excellent/Very good/Good): %d (%d%%)\n", 
+              positive_health, round(positive_health/total_health_resp * 100, 0)))
+  cat(sprintf("- Concerning Health (Fair/Poor): %d (%d%%)\n", 
+              concerning_health, round(concerning_health/total_health_resp * 100, 0)))
+}
+```
+## Community and Social Support {.tabset}
+Overview of community participation and support networks.
+```{r community-social}
+# 1. Community Participation Analysis
+clean_activities <- function(x) {
+  activities <- c(
+    "Religious Activities",
+    "Community Betterment",
+    "Health and Wellbeing Activities",
+    "Educational Involvement",
+    "Civic Activities",
+    "Creative and Cultural Activities",
+    "Neighborhood Groups",
+    "Local Business Support",
+    "Recreational Groups",
+    "Other",
+    "No Participation"
+  )
+  
+  all_responses <- unlist(strsplit(as.character(x), ","))
+  
+  categorized <- sapply(all_responses, function(resp) {
+    if(grepl("Religious", resp)) return("Religious Activities")
+    if(grepl("Community Betterment", resp)) return("Community Betterment")
+    if(grepl("Health", resp)) return("Health and Wellbeing Activities")
+    if(grepl("Educational", resp)) return("Educational Involvement")
+    if(grepl("Civic", resp)) return("Civic Activities")
+    if(grepl("Creative", resp)) return("Creative and Cultural Activities")
+    if(grepl("Neighborhood", resp)) return("Neighborhood Groups")
+    if(grepl("Local Business", resp)) return("Local Business Support")
+    if(grepl("Recreational", resp)) return("Recreational Groups")
+    if(grepl("Other", resp)) return("Other")
+    if(grepl("not participated", resp)) return("No Participation")
+    return(NA)
+  })
+  
+  return(categorized)
+}
+
+# Community Activity Analysis
+total_respondents <- sum(!is.na(data$comm_part_m))
+activity_counts <- table(unlist(lapply(data$comm_part_m, clean_activities)))
+activity_df <- data.frame(
+  Activity = names(activity_counts),
+  Count = as.numeric(activity_counts)
+) %>%
+  mutate(
+    Percentage = round(Count/total_respondents * 100, 0)  # Round to whole numbers
+  ) %>%
+  arrange(desc(Count))
+
+cat(sprintf("\nCommunity Activity Participation (n=%d):\n", total_respondents))
+print(knitr::kable(activity_df,
+      col.names = c("Type of Activity", "Count", "Percentage (%)"),
+      format = "simple"))
+
+# 2. Support Type Analysis
+analyze_support <- function(data, column, support_type) {
+  total_resp <- sum(!is.na(data[[column]]))
+  freq_table <- table(data[[column]], useNA = "ifany")
+  support_df <- data.frame(
+    Frequency = names(freq_table),
+    Count = as.numeric(freq_table)
+  ) %>%
+    mutate(
+      Percentage = round(Count/sum(Count) * 100, 0)  # Round to whole numbers
+    )
+  
+  cat(sprintf("\n%s (n=%d):\n", support_type, total_resp))
+  print(knitr::kable(support_df,
+        col.names = c(paste(support_type, "Frequency"), "Count", "Percentage (%)"),
+        format = "simple"))
+}
+
+# Define support types
+support_types <- list(
+  "Emotional Support" = "comm_give_emo_supp_m",
+  "Financial Support" = "comm_give_money_m",
+  "Caregiving Support" = "comm_give_caregiving_m",
+  "Knowledge Sharing" = "comm_give_knowledge_m",
+  "Transportation Support" = "comm_give_transport_m",
+  "Errands Support" = "comm_give_errands_m",
+  "Food Support" = "comm_give_food_m"
+)
+
+# Run analysis for each support type
+for(support_name in names(support_types)) {
+  analyze_support(data, support_types[[support_name]], support_name)
+}
+
+# 3. Calculate regular support summary
+calculate_regular_support <- function(data, column) {
+  sum(data[[column]] %in% c("Often", "Sometimes"), na.rm = TRUE) / 
+    sum(!is.na(data[[column]])) * 100
+}
+
+regular_support <- sapply(support_types, function(col) {
+  calculate_regular_support(data, col)
+})
+
+support_summary <- data.frame(
+  Support_Type = names(support_types),
+  Regular_Support = round(regular_support, 0),  # Round to whole numbers
+  Sample_Size = sapply(support_types, function(col) sum(!is.na(data[[col]])))
+) %>%
+  arrange(desc(Regular_Support))
+
+cat("\nRegular Support Summary (Often + Sometimes):\n")
+print(knitr::kable(support_summary,
+      col.names = c("Type of Support", "Percentage Providing Regular Support (%)", "Sample Size (n)"),
+      format = "simple"))
+
+# Community Support relationships
+total_relationships <- sum(!is.na(data$comm_relationships_m))
+relationships_df <- data %>%
+  filter(!is.na(comm_relationships_m)) %>%
+  count(comm_relationships_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)  # Round to whole numbers
+  ) %>%
+  arrange(desc(n))
+
+cat(sprintf("\nCommunity Relationships Strength (n=%d):\n", total_relationships))
+print(knitr::kable(relationships_df,
+      col.names = c("Relationship Level", "Count", "Percentage (%)"),
+      format = "simple"))
+```
+## Survey Feedback {.tabset}
+Analysis of member feedback and suggestions.
+```{r survey-feedback}
+library(wordcloud)
+library(tm)
+
+# Create Spanish to English translation dictionary
+spanish_to_english <- list(
+  # Basic terms
+  "gracias" = "thank you",
+  "ayuda" = "help",
+  "familia" = "family",
+  "dinero" = "money",
+  "apoyo" = "support",
+  "programa" = "program",
+  "necesidad" = "need",
+  "trabajo" = "work",
+  "pago" = "payment",
+  "casa" = "house",
+  "hogar" = "home",
+  "comida" = "food",
+  "niños" = "children",
+  "mejor" = "better",
+  "bueno" = "good",
+  "excelente" = "excellent",
+  "mucho" = "much",
+  "mas" = "more",
+  "tiempo" = "time",
+  "vida" = "life",
+  "continuar" = "continue",
+  "ayudar" = "help",
+  "personas" = "people",
+  "comunidad" = "community",
+  "beneficio" = "benefit",
+  "muchas" = "many",
+  "seguir" = "continue",
+  "pregunta" = "question",
+  "respuesta" = "response",
+  "experiencia" = "experience"
+  # Add more translations as needed
+)
+
+# Function to count Spanish responses
+count_spanish_responses <- function(text_vector) {
+  # Count responses containing common Spanish words
+  spanish_indicators <- c("gracias", "ayuda", "familia", "este", "por", "para", "con", "los", "las", "el", "la")
+  spanish_count <- sum(sapply(text_vector, function(x) 
+    any(sapply(spanish_indicators, function(word) 
+      grepl(word, tolower(x))))))
+  return(spanish_count)
+}
+
+# Function to translate Spanish text to English
+translate_text <- function(text) {
+  text_lower <- tolower(text)
+  for(span_word in names(spanish_to_english)) {
+    text_lower <- gsub(span_word, spanish_to_english[[span_word]], text_lower)
+  }
+  return(text_lower)
+}
+
+# Prepare and analyze feedback
+feedback_data <- data %>%
+  filter(!is.na(survey_feedback_m))
+
+# Count Spanish responses before translation
+spanish_response_count <- count_spanish_responses(feedback_data$survey_feedback_m)
+
+# Translate and prepare text for word cloud
+translated_feedback <- sapply(feedback_data$survey_feedback_m, translate_text)
+
+# Create corpus with translated text
+feedback_corpus <- Corpus(VectorSource(translated_feedback))
+feedback_corpus <- tm_map(feedback_corpus, removePunctuation)
+feedback_corpus <- tm_map(feedback_corpus, removeNumbers)
+feedback_corpus <- tm_map(feedback_corpus, removeWords, stopwords("english"))
+feedback_corpus <- tm_map(feedback_corpus, stripWhitespace)
+
+# Create document term matrix
+dtm <- TermDocumentMatrix(feedback_corpus)
+matrix <- as.matrix(dtm)
+words <- sort(rowSums(matrix), decreasing=TRUE)
+df <- data.frame(word = names(words), freq=words)
+
+# Generate word cloud
+print("Survey Feedback Word Cloud:")
+wordcloud(words = df$word, freq = df$freq, min.freq = 2,
+          max.words=100, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+
+# Print top themes
+print("\nMost Common Themes in Feedback:")
+top_themes <- head(df, 20)
+print(knitr::kable(top_themes,
+      col.names = c("Theme", "Frequency"),
+      format = "simple"))
+
+# Print translation note
+cat(sprintf("\nNote: %d feedback responses were translated from Spanish to English for standardization in analysis.\n", 
+            spanish_response_count))
+
+# Optional: Show some example translations
+print("\nExample Translations (Original → Translated):")
+# Show a few examples where translation occurred
+translated_examples <- data.frame(
+  Original = feedback_data$survey_feedback_m[1:3],
+  Translated = translated_feedback[1:3]
+)
+print(knitr::kable(translated_examples,
+      col.names = c("Original Response", "Translated Response"),
+      format = "simple"))
+
+
+```
+
+
+

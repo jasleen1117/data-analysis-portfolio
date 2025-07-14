@@ -1,0 +1,1282 @@
+---
+title: "MidlineDescriptive"
+author: "Jasleen"
+date: "2025-04-11"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: united
+    highlight: tango
+    code_folding: hide
+    fig_caption: true
+    df_print: kable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,          # Show code
+  message = FALSE,       # Don't show messages
+  warning = FALSE,       # Don't show warnings
+  fig.align = "center",  # Center figures
+  out.width = "80%",     # Control figure width
+  fig.width = 10,        # Set figure width
+  fig.height = 6         # Set figure height
+)
+```
+
+```{r, libraries}
+#### load libraries
+library(janitor) # Simple Tools for Examining and Cleaning Dirty Data, CRAN v2.1.0
+library(tidyverse) # Easily Install and Load the 'Tidyverse', CRAN v1.3.1
+library(lubridate) # Make Dealing with Dates a Little Easier, CRAN v1.7.10
+library(dplyr)
+library(tidyr)
+library(readr) #Reading CSVs
+library(stringr)
+library(ggplot2) #For visualization
+library(scales) #For visualization
+library(forcats) #Helps with ordering numbers and values
+library(RColorBrewer) #For Visualization
+library(grid) #To draw Venn Diagram
+library(reshape2) #For HeatMaps
+library(knitr)
+library(scales)
+library(RColorBrewer)
+library(cluster)
+```
+
+```{r,}
+# Load the Hamilton County midline data
+hamilton_county_midline <- read.csv("hamilton_county_midline_wide.csv")
+
+# Add participant_id column
+hamilton_county_midline <- hamilton_county_midline %>%
+  mutate(participant_id = paste("", row_number()))
+```
+
+#Education
+```{r}
+# Count the number of responses for each education level
+edu_data <- hamilton_county_midline %>%
+  filter(!is.na(edu_highest_level)) %>%
+  count(edu_highest_level) %>%
+  mutate(proportion = n / sum(n) * 100)
+
+# Create a mapping for shorter names
+edu_data <- edu_data %>%
+  mutate(edu_short = recode(edu_highest_level,
+                           "Less than high school" = "Less than HS",
+                           "High school diploma or equivalent GED" = "High school/GED",
+                           "Some college, no degree or certification (including currently enrolled in college)" = "Some college",
+                           "Certificate or technical degree" = "Certificate/Technical",
+                           "Associates degree" = "Associate's",
+                           "Bachelor's degree" = "Bachelor's",
+                           "Master's degree" = "Master's",
+                           "Professional or Doctorate degree" = "Prof./Doctorate",
+                           "Other (please specify)" = "Other",
+                           "Prefer not to answer" = "Prefer not to answer"))
+
+
+ggplot(edu_data, aes(x = reorder(edu_short, -proportion), y = proportion)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = paste0(round(proportion), "%")), 
+            color = "black", 
+            vjust = -0.5,
+            size = 4) +
+  theme_minimal(base_family = "Arial", base_size = 14) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12, lineheight = 0.8, angle = 0),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 14, margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    title = "Highest Level of Formal Education Completed",
+    x = "Education Level",
+    y = "Percentage of Respondents"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), 
+                    limits = c(0, max(edu_data$proportion) * 1.1)) +  # Add some spacing at top
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+```
+
+#Enrollment 
+```{r}
+# Calculate the counts and proportions for certificate program enrollment
+edu_cert_prog_data <- hamilton_county_midline %>%
+  filter(!is.na(edu_cert_prog)) %>%
+  count(edu_cert_prog) %>%
+  mutate(proportion = n / sum(n) * 100)
+
+# Create bar chart for certificate program enrollment
+ggplot(edu_cert_prog_data, aes(x = edu_cert_prog, y = proportion)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = paste0(round(proportion), "%")), 
+            color = "black", 
+            vjust = -0.5,  # Position label above bar
+            size = 4) +
+  theme_minimal(base_family = "Arial", base_size = 14) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12, lineheight = 0.8),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 14, margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    title = "Currently Enrolled in Certificate or Degree Program",
+    x = "Response",
+    y = "Percentage of Respondents"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), 
+                     limits = c(0, max(edu_cert_prog_data$proportion) * 1.1)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10))
+```
+
+#Type of enrollment
+```{r}
+# Remove NA values and handle empty strings
+edu_enroll <- hamilton_county_midline %>%
+  filter(!is.na(edu_cert_prog_which), edu_cert_prog_which != "", edu_cert_prog == "Yes") %>%
+  count(edu_cert_prog_which) %>%
+  mutate(proportion = n / sum(n) * 100)
+
+# Recode the values
+edu_enroll <- edu_enroll %>%
+  mutate(edu_short = recode(edu_cert_prog_which,
+                           "General Education Diploma (GED) program/High School Diploma" = "GED/HS Diploma",
+                           "Community College Courses (academic)" = "Community College",
+                           "Vocational Training (e.g., healthcare, IT, culinary arts)" = "Vocational Training",
+                           "Skills Building Workshop (e.g., coding bootcamp, project management certification)" = "Skills Workshop",
+                           "4-year College Courses" = "4-year College",
+                           "Technical or Trade School (e.g., carpentry, automotive technology)" = "Technical/Trade School",
+                           "Other (please specify)" = "Other"))
+
+# horizontal bar chart for enrollment types
+ggplot(edu_enroll, aes(x = reorder(edu_short, -proportion), y = proportion)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = paste0(round(proportion), "%")), 
+            color = "black", 
+            hjust = -0.2,
+            size = 4) +
+  theme_minimal(base_family = "Arial", base_size = 14) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12, lineheight = 0.8),
+    axis.title.x = element_text(size = 14, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 14, margin = margin(r = 10)),
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    title = "Types of Enrollment",
+    x = "Percentage of Respondents",
+    y = "Education Level"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), 
+                    limits = function(x) c(0, max(x) * 1.3)) +  # More space for labels
+  coord_flip()
+```
+#Educational Progress
+```{r}
+# function to handle multiple responses - ignoring commas within parentheses
+count_multiple_responses <- function(data, column) {
+  # Extract the column data
+  col_data <- as.character(data[[column]])
+  col_data <- col_data[!is.na(col_data) & col_data != "NA"]
+  
+  # Initialize an empty list to store parsed responses
+  all_parsed_responses <- list()
+  
+  # Process each row
+  for (response in col_data) {
+    # Skip NA or empty responses
+    if (is.na(response) || response == "") {
+      next
+    }
+    
+    # Initialize variables for parsing
+    parsed_responses <- c()
+    current_response <- ""
+    in_parentheses <- FALSE
+    
+    # Go through each character
+    for (i in 1:nchar(response)) {
+      char <- substr(response, i, i)
+      
+      # Track if we're inside parentheses
+      if (char == "(") {
+        in_parentheses <- TRUE
+      } else if (char == ")") {
+        in_parentheses <- FALSE
+      }
+      
+      # If we encounter a comma not inside parentheses, split
+      if (char == "," && !in_parentheses) {
+        parsed_responses <- c(parsed_responses, trimws(current_response))
+        current_response <- ""
+      } else {
+        # Otherwise, add the character to the current response
+        current_response <- paste0(current_response, char)
+      }
+    }
+    
+    # Add the last response
+    if (trimws(current_response) != "") {
+      parsed_responses <- c(parsed_responses, trimws(current_response))
+    }
+    
+    all_parsed_responses <- c(all_parsed_responses, parsed_responses)
+  }
+  
+  # Flatten the list to a vector
+  all_responses <- unlist(all_parsed_responses)
+  
+  # Count each response
+  response_counts <- table(all_responses)
+  
+  # Calculate percentages based on number of respondents (not responses)
+  n_respondents <- length(col_data)
+  
+  # Create a data frame for results
+  result_df <- data.frame(
+    Response = names(response_counts),
+    Count = as.numeric(response_counts),
+    Percentage = round(as.numeric(response_counts) / n_respondents * 100, 1)
+  )
+  
+  # Sort by count in descending order
+  result_df <- result_df[order(-result_df$Count), ]
+  
+  # Add a total row for respondents
+  result_df <- rbind(
+    result_df,
+    data.frame(
+      Response = "Total Respondents",
+      Count = n_respondents,
+      Percentage = NA
+    )
+  )
+  
+  return(result_df)
+}
+
+# Create table for educational progress
+edu_progress_table <- count_multiple_responses(hamilton_county_midline, "edu_progress")
+
+# Add percentage symbol
+edu_progress_table$Percentage <- ifelse(is.na(edu_progress_table$Percentage), 
+                                      NA, 
+                                      paste0(edu_progress_table$Percentage, "%"))
+```
+
+# Educational barriers
+```{r}
+# Count respondents who answered the education barriers question
+edu_barriers_count <- hamilton_county_midline %>%
+  filter(edu_barriers != "NA", !is.na(edu_barriers)) %>%
+  nrow()
+
+# Analyze educational barriers with the multiple response function
+edu_barriers_data <- count_multiple_responses(hamilton_county_midline, "edu_barriers")
+
+# Check for "Other" reasons and get the text explanations
+other_edu_barriers <- hamilton_county_midline %>%
+  filter(grepl("Other \\(please specify\\)", edu_barriers),
+         edu_barriers_9_TEXT != "NA", 
+         !is.na(edu_barriers_9_TEXT)) %>%
+  select(edu_barriers_9_TEXT)
+
+# Create a comprehensive table that includes all barriers and their text explanations
+# First, extract all the standard barriers (excluding "Other")
+standard_barriers <- data.frame(
+  barrier = c(
+    "Financial barriers",
+    "Lack of time (e.g., work or caregiving responsibilities)",
+    "I choose to focus on my career or work full-time",
+    "Health or personal challenges",
+    "Transportation issues",
+    "No suitable programs are available",
+    "Completed my program"
+  )
+)
+
+# Count each standard barrier
+standard_barriers_count <- lapply(standard_barriers$barrier, function(barrier) {
+  count <- sum(grepl(barrier, hamilton_county_midline$edu_barriers, fixed = TRUE))
+  return(data.frame(
+    reason = barrier,
+    n = count,
+    type = "Standard"
+  ))
+})
+standard_barriers_df <- do.call(rbind, standard_barriers_count)
+
+# Then, get all "Other" barriers with their specific text
+other_barriers <- hamilton_county_midline %>%
+  filter(grepl("Other \\(please specify\\)", edu_barriers),
+         edu_barriers_9_TEXT != "NA", 
+         !is.na(edu_barriers_9_TEXT)) %>%
+  mutate(reason = paste0("Other: ", edu_barriers_9_TEXT)) %>%
+  count(reason) %>%
+  mutate(type = "Other")
+
+# Combine all barriers
+all_barriers_education <- bind_rows(standard_barriers_df, other_barriers) %>%
+  arrange(desc(n)) %>%
+  mutate(proportion = round(n / edu_barriers_count * 100, 1))  
+```
+
+# Employment
+```{r}
+# Filter out "Prefer not to answer" 
+work_data <- hamilton_county_midline %>%
+  filter(work != "Prefer not to answer", !is.na(work)) %>%
+  count(work) %>%
+  mutate(proportion = round(n / sum(n) * 100,1))
+```
+#full/part time
+There's a cluster of part-time workers in the 10-30 hours range
+Another cluster appears around the 40-hour mark, which is typical for standard full-time employment
+The vertical dashed line at 35 hours indicates the threshold typically used to distinguish part-time from full-time work
+There's an outlier at around 80 hours per week, representing someone working significantly more than average
+
+The distribution appears bimodal (having two peaks), suggesting that respondents tend to either work part-time hours (around 20 hours) or standard full-time hours (around 40 hours), with fewer people working in between these common arrangements.
+```{r}
+# Since there's no direct work_type variable in the midline data,
+# I use work_hours_per_week to categorize full-time vs part-time workers
+# Standard definition: Full-time is typically 35+ hours per week
+
+# Create a work type categorization based on hours
+work_type_data <- hamilton_county_midline %>%
+  filter(work == "Yes" & !is.na(work_hours_per_week)) %>%
+  mutate(work_type = case_when(
+    work_hours_per_week >= 35 ~ "Full-time",
+    work_hours_per_week < 35 ~ "Part-time",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(work_type)) %>%
+  count(work_type) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1))  # Round to 1 decimal place
+
+# Additional analysis - distribution of work hours
+work_hours_summary <- hamilton_county_midline %>%
+  filter(work == "Yes" & !is.na(work_hours_per_week)) %>%
+  summarise(
+    mean_hours = round(mean(work_hours_per_week, na.rm = TRUE), 1),  # Round to 1 decimal
+    median_hours = median(work_hours_per_week, na.rm = TRUE),
+    min_hours = min(work_hours_per_week, na.rm = TRUE),
+    max_hours = max(work_hours_per_week, na.rm = TRUE)
+  )
+
+# Create histogram of work hours with density line
+hamilton_county_midline %>%
+  filter(work == "Yes" & !is.na(work_hours_per_week)) %>%
+  ggplot(aes(x = work_hours_per_week)) +
+  geom_histogram(aes(y = ..density..), binwidth = 5, fill = "#46214a", color = "white", alpha = 0.7) +
+  geom_density(linewidth = 1, color = "#D70073") +  # Adding density line in a contrasting color
+  theme_minimal(base_family = "Arial", base_size = 14) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 14, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 14, margin = margin(r = 10)),
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    title = "Distribution of Weekly Work Hours",
+    x = "Hours Worked Per Week",
+    y = "Density"
+  ) +
+  # Add a vertical line at 35 hours to show the full-time threshold
+  geom_vline(xintercept = 35, linetype = "dashed", color = "black", linewidth = 0.5) +
+  annotate("text", x = 35, y = max(density(hamilton_county_midline$work_hours_per_week[
+    hamilton_county_midline$work == "Yes" & !is.na(hamilton_county_midline$work_hours_per_week)
+  ])$y) * 0.8, label = "Full-time threshold", hjust = -0.1, size = 3.5)
+```
+
+# Change in work hours 
+```{r}
+# Analyze work hours change
+work_hours_change_data <- hamilton_county_midline %>%
+  filter(work_hours_change != "NA", !is.na(work_hours_change)) %>%
+  count(work_hours_change) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1))  # Round to 1 decimal place
+
+# Analyze reasons for decreased hours
+work_decrease_data <- hamilton_county_midline %>%
+  filter(work_hours_change == "My work hours have DECREASED") %>%
+  filter(work_decrease != "NA", !is.na(work_decrease)) %>%
+  count(work_decrease) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1))  # Round to 1 decimal place
+
+# Get the "Other" reasons for decreased hours
+other_decrease_reasons <- hamilton_county_midline %>%
+  filter(work_decrease == "Other (please specify)", 
+         work_decrease_6_TEXT != "NA", 
+         !is.na(work_decrease_6_TEXT)) %>%
+  select(work_decrease_6_TEXT)
+
+# Analyze reasons for increased hours
+work_increase_data <- hamilton_county_midline %>%
+  filter(work_hours_change == "My work hours have INCREASED") %>%
+  filter(work_increase != "NA", !is.na(work_increase)) %>%
+  count(work_increase) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1))  # Round to 1 decimal place
+
+# Get the "Other" reasons for increased hours
+other_increase_reasons <- hamilton_county_midline %>%
+  filter(work_increase == "Other (please specify)", 
+         work_increase_5_TEXT != "NA", 
+         !is.na(work_increase_5_TEXT)) %>%
+  select(work_increase_5_TEXT)
+
+# Create a combined table of decrease reasons with proper labels
+decrease_reasons_table <- work_decrease_data %>%
+  mutate(reason_type = "Decrease",
+         reason = case_when(
+           work_decrease == "Other (please specify)" ~ "Other: pregnancy",
+           TRUE ~ work_decrease
+         ))
+
+# Create a combined table of increase reasons with proper labels
+increase_reasons_table <- work_increase_data %>%
+  mutate(reason_type = "Increase",
+         reason = case_when(
+           work_increase == "Other (please specify)" ~ "Other: More availability",
+           TRUE ~ work_increase
+         ))
+
+# Combine all reasons into one data frame
+all_reasons <- bind_rows(decrease_reasons_table, increase_reasons_table) %>%
+  select(reason_type, reason, n, proportion)
+```
+#Reasons for not working
+```{r}
+# Count respondents who are not working
+not_working_count <- hamilton_county_midline %>%
+  filter(work == "No") %>%
+  nrow()
+
+# Analyze reasons for not working
+work_no_reason_data <- hamilton_county_midline %>%
+  filter(work == "No") %>%
+  filter(work_no_reason != "NA", !is.na(work_no_reason)) %>%
+  count(work_no_reason) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%  # Round to 1 decimal place
+  arrange(desc(n))
+
+# Check for "Other" reasons and get the text explanations
+other_no_work_reasons <- hamilton_county_midline %>%
+  filter(work == "No", 
+         work_no_reason == "Other (please specify)", 
+         work_no_reason_7_TEXT != "NA", 
+         !is.na(work_no_reason_7_TEXT)) %>%
+  select(work_no_reason_7_TEXT)
+
+# Create a comprehensive table that includes all standard and "Other" reasons
+# First, get all non-"Other" reasons
+standard_reasons <- hamilton_county_midline %>%
+  filter(work == "No",
+         work_no_reason != "NA", 
+         !is.na(work_no_reason),
+         work_no_reason != "Other (please specify)") %>%
+  count(reason = work_no_reason) %>%
+  mutate(type = "Standard")
+
+# Then, get all "Other" reasons with their specific text
+other_reasons <- hamilton_county_midline %>%
+  filter(work == "No",
+         work_no_reason == "Other (please specify)", 
+         work_no_reason_7_TEXT != "NA", 
+         !is.na(work_no_reason_7_TEXT)) %>%
+  mutate(reason = paste0("Other: ", work_no_reason_7_TEXT)) %>%
+  count(reason) %>%
+  mutate(type = "Other")
+
+# Combine all reasons
+all_reasons_notworking <- bind_rows(standard_reasons, other_reasons) %>%
+  arrange(desc(n)) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) 
+```
+# Employment length
+```{r}
+# Filter out empty string responses and calculate counts and proportions
+work_employ_length_data <- hamilton_county_midline %>%
+  filter(work_employ_length != "NA", !is.na(work_employ_length)) %>%
+  count(work_employ_length) %>%
+  mutate(proportion = round(n / sum(n) * 100),1)
+```
+# Insurance type
+```{r}
+# Filter out unnecessary responses, count valid responses, and calculate proportions
+insurance_data <- hamilton_county_midline %>%
+  filter(insurance_type != "Prefer not to answer") %>%
+  count(insurance_type) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1))  # Round to 1 decimal place
+
+# Recode the lengthy response options into shorter names
+insurance_data <- insurance_data %>%
+  mutate(insurance_short = recode(insurance_type,
+    "I don't know/not sure" = "Don't Know/Unsure",
+    "Plan purchased through an employer or union (including plans purchased through another person's employer)" = "Employer/Union Plan",
+    "A private nongovernmental plan that you or another family member buys on your own" = "Private Plan",
+    "Medicaid" = "Medicaid",
+    "Children's Health Insurance Program (CHIP)" = "CHIP",
+    "Military-related health care TRICARE (CHAMPUS)/VA health care/CHAMP-VA" = "Military/VA",
+    "Indian Health Service" = "Indian Health Service",
+    "State-sponsored health plan" = "State Plan",
+    "Other governmental program (please specify)" = "Other Gov. Program",
+    "No coverage of any type" = "No Coverage"
+  ))
+
+# Sort by frequency (highest to lowest)
+insurance_data <- insurance_data %>%
+  arrange(desc(proportion))
+
+# horizontal bar chart for insurance data
+ggplot(insurance_data, aes(x = reorder(insurance_short, -proportion), y = proportion)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = paste0(round(proportion), "%")),  # Keep whole numbers for visualization
+            color = "black", 
+            hjust = -0.1,
+            vjust = 0.5, 
+            size = 4) +
+  theme_minimal(base_family = "Arial", base_size = 14) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12, lineheight = 0.8),
+    axis.title.x = element_text(size = 14, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 14, margin = margin(r = 10)),
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    title = "Primary Source of Health Insurance",
+    x = "Percentage of Respondents",
+    y = "Insurance Type"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                    limits = function(x) c(0, max(x) * 1.3)) +  # More space for labels
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 15)) +
+  coord_flip()
+```
+#Physician information
+```{r}
+# Analyze personal physician data (doctor_who)
+doctor_who <- hamilton_county_midline %>%
+  filter(doctor_who != "Prefer not to answer", doctor_who != "", !is.na(doctor_who)) %>%
+  count(doctor_who) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1))  
+# Create visualization for doctor_who
+ggplot(doctor_who, aes(x = reorder(doctor_who, -proportion), y = proportion)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = paste0(round(proportion), "%")),
+            color = "black", 
+            vjust = -0.5,
+            size = 4) +
+  theme_minimal(base_family = "Arial", base_size = 14) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12, lineheight = 0.8),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 14, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 14, margin = margin(r = 10)),
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    title = "Personal Physician Status",
+    x = "Response",
+    y = "Percentage of Respondents"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), 
+                    limits = function(x) c(0, max(x) * 1.2)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 15))
+```
+
+# Could not afford doctor
+```{r}
+# Analyze couldn't see doctor due to cost data
+doctor_not_see_data <- hamilton_county_midline %>%
+  filter(doctor_not_see != "Prefer not to answer", 
+         doctor_not_see != "I don't know/not sure", 
+         doctor_not_see != "", 
+         !is.na(doctor_not_see)) %>%
+  count(doctor_not_see) %>%
+  mutate(proportion = round(n / sum(n) * 100,1))
+```
+
+# Time since last doctor visit
+```{r}
+# Analyze time since last doctor visit data
+doctor_how_long_data <- hamilton_county_midline %>%
+  filter(doctor_how_long != "Prefer not to answer", 
+         doctor_how_long != "", 
+         !is.na(doctor_how_long)) %>%
+  count(doctor_how_long) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) 
+
+# Create proper order for time categories
+doctor_how_long_data <- doctor_how_long_data %>%
+  mutate(doctor_how_long = factor(doctor_how_long, 
+                                levels = c("Less than 1 year", 
+                                           "1-2 years", 
+                                           "3-5 years", 
+                                           "5 or more years ago",
+                                           "Never",
+                                           "I don't know/not sure")))
+
+# Create visualization for doctor_how_long
+ggplot(doctor_how_long_data, aes(x = doctor_how_long, y = proportion)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = paste0(round(proportion), "%")),
+            color = "black", 
+            vjust = -0.5,
+            size = 4) +
+  theme_minimal(base_family = "Arial", base_size = 14) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 14, margin = margin(t = 15)),  # More margin for angled text
+    axis.title.y = element_text(size = 14, margin = margin(r = 10)),
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),
+    plot.margin = margin(20, 20, 30, 20)  # Extra bottom margin for angled labels
+  ) +
+  labs(
+    title = "Time Since Last Doctor Visit",
+    x = "Time Period",
+    y = "Percentage of Respondents"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), 
+                    limits = function(x) c(0, max(x) * 1.2))
+```
+# Housing situation
+```{r}
+# Analyze housing situation
+housing_situation_data <- hamilton_county_midline %>%
+  filter(housing_situation != "NA", !is.na(housing_situation)) %>%
+  # Create a new column with the recategorized housing types
+  mutate(housing_category = case_when(
+    housing_situation %in% c("No fixed residence (e.g., homeless, other places not made for housing)", 
+                            "Temporary housing (e.g., shelter, transitional housing)") ~ "Homeless/Temporary",
+    housing_situation == "Rented" ~ "Rented",
+    housing_situation %in% c("Owned by you or someone in this household with a mortgage or loan (including home equity loans)",
+                           "Owned by you or someone in this household (no mortgage or loan)") ~ "Owned",
+    TRUE ~ "Other"
+  )) %>%
+  count(housing_category) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%  # Round to 1 decimal place
+  arrange(desc(n))
+
+# Check for "Other" reasons and get the text explanations
+other_housing_situations <- hamilton_county_midline %>%
+  filter(housing_situation == "Other (please specify)", 
+         housing_situation_7_TEXT != "NA", 
+         !is.na(housing_situation_7_TEXT)) %>%
+  select(housing_situation_7_TEXT)
+
+# Original housing situation distribution (before recategorization)
+original_housing_data <- hamilton_county_midline %>%
+  filter(housing_situation != "NA", !is.na(housing_situation)) %>%
+  count(housing_situation) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+
+# Create visualization of the recategorized housing situations
+# Analyze housing situation
+housing_situation_data <- hamilton_county_midline %>%
+  filter(housing_situation != "NA", !is.na(housing_situation)) %>%
+  # Create a new column with the recategorized housing types
+  mutate(housing_category = case_when(
+    housing_situation %in% c("No fixed residence (e.g., homeless, other places not made for housing)", 
+                            "Temporary housing (e.g., shelter, transitional housing)") ~ "Homeless/\nTemporary",
+    housing_situation == "Rented" ~ "Rented",
+    housing_situation %in% c("Owned by you or someone in this household with a mortgage or loan (including home equity loans)",
+                           "Owned by you or someone in this household (no mortgage or loan)") ~ "Owned",
+    TRUE ~ "Other"
+  )) %>%
+  count(housing_category) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%  # Round to 1 decimal place
+  arrange(desc(n))
+
+# Create visualization of the recategorized housing situations
+housingsituation_plot <- ggplot(housing_situation_data, aes(x = reorder(housing_category, proportion), y = proportion)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = paste0(round(proportion), "%")),  
+            color = "white", 
+            hjust = 1.5,  # Move labels inside bars
+            vjust = 0.5,  # Center vertically
+            size = 7) +  
+  theme_minimal(base_family = "Arial", base_size = 16) +  # Increased from 14 to 16
+  theme(
+    text = element_text(family = "Arial", face="bold"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 20),  # Increased from 18 to 20
+    axis.text.y = element_text(size = 20),  # Increased from 18 to 20
+    axis.title.x = element_blank(),  # Remove x-axis label
+    axis.title.y = element_blank(),  # Remove y-axis label
+    plot.title = element_text(size = 20, face = "bold", margin = margin(b = 10)),  # Increased from 18 to 20
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    title = "Housing Situation"  # Changed title
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), 
+                    limits = c(0, 75)) +
+  coord_flip()  # Flip coordinates
+
+# Save the visualization
+ggsave("housingsituation_plot.png", 
+       plot = housingsituation_plot,
+       width = 10, 
+       height = 7, 
+       dpi = 300)
+```
+
+# Housing shared arrangements
+```{r}
+# Analyze housing shared arrangements
+housing_shared_data <- hamilton_county_midline %>%
+  filter(housing_shared != "NA", !is.na(housing_shared)) %>%
+  count(housing_shared) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%  # Round to 1 decimal place
+  arrange(desc(n))
+
+# Check for "Other" shared arrangements and get the text explanations
+other_housing_shared <- hamilton_county_midline %>%
+  filter(housing_shared == "Other, please specify", 
+         housing_shared_3_TEXT != "NA", 
+         !is.na(housing_shared_3_TEXT)) %>%
+  select(housing_shared_3_TEXT)
+
+# Categorize the "Other" shared arrangements for better analysis
+other_housing_shared_categorized <- hamilton_county_midline %>%
+  filter(housing_shared == "Other, please specify", 
+         housing_shared_3_TEXT != "NA", 
+         !is.na(housing_shared_3_TEXT)) %>%
+  mutate(shared_category = case_when(
+    grepl("rent.*by me|rent my own|i rent|rented by myself|i live by myself|i live in my own|rented by me|corporate owned", 
+          tolower(housing_shared_3_TEXT)) ~ "I rent/own independently",
+    grepl("partner|parents|family|guardian", 
+          tolower(housing_shared_3_TEXT)) ~ "Live with family/partner",
+    grepl("program|bridges|group home", 
+          tolower(housing_shared_3_TEXT)) ~ "Housing program/Group home",
+    TRUE ~ "Other"
+  )) %>%
+  count(shared_category) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1))  # Round to 1 decimal place
+
+# Combine housing shared data - standard categories and recategorized "Other" entries
+standard_shared <- hamilton_county_midline %>%
+  filter(housing_shared != "NA", 
+         housing_shared != "Other, please specify", 
+         !is.na(housing_shared)) %>%
+  count(shared_category = housing_shared) %>%
+  mutate(type = "Standard")
+
+# Add the recategorized "Other" shared arrangements
+other_shared_recategorized <- other_housing_shared_categorized %>%
+  rename(shared_category = shared_category, n = n) %>%
+  select(shared_category, n) %>%
+  mutate(type = "Other (recategorized)")
+
+# Combine all shared housing data
+all_shared_housing <- bind_rows(standard_shared, other_shared_recategorized) %>%
+  arrange(desc(n)) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) 
+```
+# Moving in the last year
+```{r}
+# Analyze whether respondents moved in the last year
+moved_last_year_data <- hamilton_county_midline %>%
+  filter(moved_last_year != "NA", !is.na(moved_last_year)) %>%
+  count(moved_last_year) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%  # Round to 1 decimal place
+  arrange(desc(n))
+
+# For those who moved, analyze how many times they moved
+moved_last_year_num_data <- hamilton_county_midline %>%
+  filter(moved_last_year == "Yes", 
+         moved_last_year_num != "NA", 
+         !is.na(moved_last_year_num)) %>%
+  count(moved_last_year_num) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%  # Round to 1 decimal place
+  arrange(desc(n))
+
+# Analyze the type of move (positive, neutral, or negative)
+move_reason_data <- hamilton_county_midline %>%
+  filter(move_reason != "NA", !is.na(move_reason)) %>%
+  count(move_reason) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%  # Round to 1 decimal place
+  arrange(desc(n))
+
+# Function to analyze move reasons (either positive or negative)
+analyze_move_reasons <- function(data, reason_column, text_column, reason_type) {
+  # Standard reasons (excluding "Other")
+  standard_reasons <- data %>%
+    filter(
+      moved_last_year == "Yes",
+      !is.na(get(reason_column)), 
+      get(reason_column) != "NA"
+    ) %>%
+    filter(!grepl("Other \\(please specify\\)", get(reason_column)))
+  
+  # Count each standard reason separately (handling multiple responses)
+  standard_reasons_list <- c()
+  
+  for (i in 1:nrow(standard_reasons)) {
+    reasons <- unlist(strsplit(as.character(standard_reasons[[reason_column]][i]), ","))
+    reasons <- trimws(reasons)
+    standard_reasons_list <- c(standard_reasons_list, reasons)
+  }
+  
+  standard_reasons_count <- as.data.frame(table(standard_reasons_list))
+  colnames(standard_reasons_count) <- c("reason", "n")
+  standard_reasons_count$type <- "Standard"
+  standard_reasons_count$reason_type <- reason_type
+  
+  # "Other" reasons with their specific text
+  other_reasons <- data %>%
+    filter(
+      moved_last_year == "Yes",
+      !is.na(get(reason_column)), 
+      get(reason_column) != "NA",
+      grepl("Other \\(please specify\\)", get(reason_column)),
+      !is.na(get(text_column)), 
+      get(text_column) != "NA"
+    ) %>%
+    mutate(reason = paste0("Other: ", get(text_column))) %>%
+    count(reason) %>%
+    mutate(type = "Other",
+           reason_type = reason_type)
+  
+  # Combine and return
+  bind_rows(standard_reasons_count, other_reasons)
+}
+
+# Analyze positive move reasons
+positive_reasons <- analyze_move_reasons(
+  hamilton_county_midline, 
+  "move_reason_positive", 
+  "move_reason_positive_12_TEXT", 
+  "Positive"
+)
+
+# Analyze negative move reasons
+negative_reasons <- analyze_move_reasons(
+  hamilton_county_midline, 
+  "move_reason_negative", 
+  "move_reason_negative_4_TEXT", 
+  "Negative"
+)
+
+# Combine positive and negative reasons
+all_move_reasons <- bind_rows(positive_reasons, negative_reasons) %>%
+  arrange(desc(reason_type), desc(n))
+
+# Calculate total respondents who reported move reasons
+total_movers_with_reasons <- hamilton_county_midline %>%
+  filter(
+    moved_last_year == "Yes",
+    (!is.na(move_reason_positive) & move_reason_positive != "NA") |
+    (!is.na(move_reason_negative) & move_reason_negative != "NA")
+  ) %>%
+  nrow()
+
+# Add proportion column
+all_move_reasons <- all_move_reasons %>%
+  mutate(proportion = round(n / total_movers_with_reasons * 100, 1))
+
+# Fix the "Moved to a better home" issue - the reason appears split due to commas in parentheses
+all_move_reasons_fixed <- all_move_reasons %>%
+  filter(!reason %in% c("more space", "newer construction", "etc.)")) %>%
+  mutate(reason = ifelse(reason == "Moved to a better home (e.g.", 
+                        "Moved to a better home (e.g., more space, newer construction, etc.)", 
+                        reason))
+```
+# Housing burden and payment status
+```{r}
+# Analyze housing burden (percentage of income spent on housing)
+housing_burden_data <- hamilton_county_midline %>%
+  filter(housing_burden != "NA", !is.na(housing_burden)) %>%
+  count(housing_burden) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+
+# Analyze whether respondents are behind on housing payments
+housing_behind_data <- hamilton_county_midline %>%
+  filter(housing_behind != "NA", !is.na(housing_behind)) %>%
+  count(housing_behind) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%
+  arrange(desc(n))
+
+# Create a cross-tabulation of housing burden and payment status
+housing_cross_tab <- hamilton_county_midline %>%
+  filter(housing_burden != "NA", !is.na(housing_burden),
+         housing_behind != "NA", !is.na(housing_behind)) %>%
+  count(housing_burden, housing_behind) %>%
+  spread(housing_behind, n) %>%
+  mutate(Total = Yes + No,
+         Percent_Behind = round(Yes / Total * 100, 1))
+
+# Calculate overall percentage of respondents behind on payments
+overall_behind_percent <- housing_behind_data %>%
+  filter(housing_behind == "Yes") %>%
+  pull(proportion)
+
+# Analyze the relationship between housing burden and payment status
+burden_categories <- c("Less than 30% of monthly income", 
+                      "30% to 50% of monthly income", 
+                      "More than 50% of monthly income")
+
+housing_relationship <- hamilton_county_midline %>%
+  filter(housing_burden != "NA", !is.na(housing_burden),
+         housing_behind != "NA", !is.na(housing_behind)) %>%
+  mutate(housing_burden = factor(housing_burden, levels = burden_categories)) %>%
+  group_by(housing_burden) %>%
+  summarize(
+    Total = n(),
+    Behind_Count = sum(housing_behind == "Yes"),
+    Behind_Percent = round(sum(housing_behind == "Yes") / n() * 100, 1)
+  ) %>%
+  arrange(housing_burden)
+```
+
+#impact fund usage
+```{r}
+# Create a function to handle multiple responses with text within parentheses
+# This function properly handles cases like "Housing expenses (e.g., rent or mortgage, utilities)"
+parse_fund_uses <- function(data) {
+  # List of standard fund use categories to look for
+  standard_categories <- c(
+    "Housing expenses",
+    "Daily living needs",
+    "Transportation",
+    "Education and/or professional development",
+    "Debt and financial management",
+    "Family caregiving",
+    "Leisure and Personal Well-being",
+    "Supporting others",
+    "Other"
+  )
+  
+  # Initialize counts
+  category_counts <- rep(0, length(standard_categories))
+  names(category_counts) <- standard_categories
+  
+  # Count respondents for each category
+  for (i in 1:nrow(data)) {
+    if (!is.na(data$impact_fund_receive[i]) && data$impact_fund_receive[i] != "NA") {
+      for (j in 1:length(standard_categories)) {
+        if (grepl(standard_categories[j], data$impact_fund_receive[i], fixed = TRUE)) {
+          category_counts[j] <- category_counts[j] + 1
+        }
+      }
+    }
+  }
+  
+  # Create data frame with results
+  result_df <- data.frame(
+    Category = names(category_counts),
+    Count = category_counts
+  ) %>%
+    arrange(desc(Count))
+  
+  return(result_df)
+}
+
+# Count respondents who provided information about fund use
+fund_use_count <- hamilton_county_midline %>%
+  filter(impact_fund_receive != "NA", !is.na(impact_fund_receive)) %>%
+  nrow()
+
+# Parse fund uses
+fund_uses <- parse_fund_uses(hamilton_county_midline)
+
+# Calculate percentages with proper rounding to 1 decimal place
+fund_uses <- fund_uses %>%
+  mutate(Percentage = round(Count / fund_use_count * 100, 1))
+
+# Get "Other" fund uses with their text explanations
+other_fund_uses <- hamilton_county_midline %>%
+  filter(grepl("Other", impact_fund_receive, fixed = TRUE),
+         impact_fund_receive_9_TEXT != "NA", 
+         !is.na(impact_fund_receive_9_TEXT)) %>%
+  select(impact_fund_receive_9_TEXT)
+
+# Create visualization for Impact Fund usage
+# First, update category names
+fund_uses$Category <- dplyr::recode(fund_uses$Category,
+                            "Education and/or professional development" = "Education",
+                            "Leisure and Personal Well-being" = "Personal Well-being",
+                            "Debt and financial management" = "Financial management",
+                            "Housing expenses" = "Housing")
+
+# Create visualization for Impact Fund usage
+ggplot(fund_uses, 
+       aes(x = reorder(Category, Percentage), # This orders in ascending order
+           y = Percentage)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = sprintf("%d%%", round(Percentage))), 
+            hjust = 1.25, # Move labels inside the bars
+            vjust = 0.5, # Center vertically
+            color = "white", # Change to white (for inside bars)
+            size = 6.5, # Increased from 4.5 to 6.5 (2 points larger)
+            family = "Arial",
+            fontface = "bold"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_text(size = 18, family = "Arial", face = "bold"), # Increased from 16 to 18
+    axis.text.x = element_text(size = 18, family = "Arial", face = "bold"), # Increased from 16 to 18
+    plot.title = element_text(size = 18, family = "Arial", face = "bold", hjust = 0.5), # Increased from 16 to 18
+    plot.subtitle = element_text(size = 14, family = "Arial", face = "bold", hjust = 0.5), # Increased from 12 to 14
+    plot.caption = element_blank()
+  ) +
+  labs(
+    title = "Use of Cash Investment",
+    y = NULL,  # Remove y-axis label
+    x = NULL   # Remove x-axis label
+  ) +
+  scale_y_continuous(
+    limits = c(0, 80), # Set a fixed limit of 0-100%
+    labels = function(x) sprintf("%d%%", round(x))
+  ) +
+  # Wrap long category names (if still needed with shorter names)
+  scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 15)) +
+  coord_flip()
+
+# Save the visualization
+ggsave("cash_investment_usage.png", 
+       width = 10, 
+       height = 7, 
+       dpi = 300)
+
+```
+
+
+```{r, all-tables}
+# Display Highest education of respondents in the midline survey
+knitr::kable(edu_data, 
+             caption = "Highest Level of Formal Education Completed",
+             digits = 1)
+
+# Display whether enrolled or not
+knitr::kable(edu_cert_prog_data, 
+             caption = "Currently Enrolled in Certificate or Degree Program",
+             digits = 1)
+
+# Display the type of enrollment
+knitr::kable(edu_enroll, 
+             caption = "Types of Enrollment",
+             digits = 1)
+
+# Display Educational Progress
+knitr::kable(edu_progress_table, 
+             caption = "Educational Progress",
+             row.names = FALSE)
+
+# Educational barriers info
+cat(paste0("Number of respondents who answered education barriers question: ", edu_barriers_count))
+
+# All types of educational barriers
+cat("\n\n### All educational barriers (sorted by frequency):\n")
+knitr::kable(all_barriers_education, 
+             caption = "Educational Barriers",
+             digits = 1)
+
+# How many of the respondents currently work?
+knitr::kable(work_data, 
+             caption = "Current Employment Status",
+             digits = 1)
+
+# How many respondents work full time vs part time?
+knitr::kable(work_type_data, 
+             caption = "Full-time vs. Part-time Employment",
+             digits = 1)
+
+# Summary of work hours
+knitr::kable(work_hours_summary, 
+             caption = "Work Hours Summary",
+             digits = 1)
+
+# Have your work hours changed?
+cat("\n\n### Work Hours Change:\n")
+knitr::kable(work_hours_change_data, 
+             caption = "Changes in Work Hours",
+             digits = 1)
+
+# Reasons for increase or decrease in work hours
+cat("\n\n### Combined Reasons for Changes in Work Hours:\n")
+knitr::kable(all_reasons, 
+             caption = "Reasons for Changes in Work Hours",
+             digits = 1)
+
+# How many respondents are not working?
+cat(paste0("\n\nNumber of respondents not working: ", not_working_count))
+
+# Why are respondents not working?
+cat("\n\n### All reasons for not working (sorted by frequency):\n")
+knitr::kable(all_reasons_notworking, 
+             caption = "Reasons for Not Working",
+             digits = 1)
+
+# Print type of insurance
+knitr::kable(insurance_data, 
+             caption = "Primary Source of Health Insurance",
+             digits = 1)
+
+# Status of your personal physician
+knitr::kable(doctor_who, 
+             caption = "Personal Physician Status",
+             digits = 1)
+
+# When did you last see the doctor?
+knitr::kable(doctor_how_long_data, 
+             caption = "Time Since Last Doctor Visit",
+             digits = 1)
+
+# What is your housing situation?
+cat("\n\n### Housing situation by category:\n")
+knitr::kable(housing_situation_data, 
+             caption = "Housing Situation Categories",
+             digits = 1)
+
+# What is your shared housing arrangement?
+cat("\n\n### Housing shared arrangements:\n")
+knitr::kable(housing_shared_data, 
+             caption = "Housing Shared Arrangements",
+             digits = 1)
+
+# Print the categorized "Other" shared arrangements
+cat("\n\n### Categorized 'Other' housing shared arrangements:\n")
+knitr::kable(other_housing_shared_categorized, 
+             caption = "Categorized Other Housing Shared Arrangements",
+             digits = 1)
+
+# Print the comprehensive table for all types of shared housing
+cat("\n\n### Combined housing shared arrangements analysis:\n")
+knitr::kable(all_shared_housing, 
+             caption = "Combined Housing Shared Arrangements Analysis",
+             digits = 1)
+
+# Did you move in the last year?
+cat("\n\n### Moved in the last year:\n")
+knitr::kable(moved_last_year_data, 
+             caption = "Moved in the Last Year",
+             digits = 1)
+
+# How many times did you move in the last year?
+cat("\n\n### Number of times moved in the last year (for those who moved):\n")
+knitr::kable(moved_last_year_num_data, 
+             caption = "Number of Times Moved in the Last Year",
+             digits = 1)
+
+# what kind of a move was it?
+cat("\n\n### Type of move (reason):\n")
+knitr::kable(move_reason_data, 
+             caption = "Type of Move (Reason)",
+             digits = 1)
+
+# All reasons for moving in the past year
+cat("\n\n### Fixed move reasons (consolidated split entries):\n")
+knitr::kable(all_move_reasons_fixed, 
+             caption = "Fixed Move Reasons",
+             digits = 1)
+
+# Print the housing burden results
+cat("\n\n### Housing Burden (percentage of income spent on housing):\n")
+knitr::kable(housing_burden_data, 
+             caption = "Housing Burden",
+             digits = 1)
+
+# Print the housing payment status results
+cat("\n\n### Behind on Housing Payments:\n")
+knitr::kable(housing_behind_data, 
+             caption = "Behind on Housing Payments",
+             digits = 1)
+
+# Print the cross-tabulation
+cat("\n\n### Cross-tabulation of Housing Burden and Payment Status:\n")
+knitr::kable(housing_cross_tab, 
+             caption = "Cross-tabulation of Housing Burden and Payment Status",
+             digits = 1)
+
+cat(paste0("\n\nOverall percentage of respondents behind on housing payments: ", overall_behind_percent, "%"))
+
+# Print the relationship analysis
+cat("\n\n### Relationship between Housing Burden and Payment Status:\n")
+knitr::kable(housing_relationship, 
+             caption = "Relationship Between Housing Burden and Payment Status",
+             digits = 1)
+
+# Summary statistics 
+cat("\n\n### Summary of Housing Affordability Issues:\n")
+cat(paste0(
+  "- ", sum(housing_burden_data$n), " respondents provided housing burden information\n",
+  "- ", sum(housing_burden_data$n[housing_burden_data$housing_burden %in% c("30% to 50% of monthly income", "More than 50% of monthly income")]), 
+  " respondents (", 
+  round(sum(housing_burden_data$proportion[housing_burden_data$housing_burden %in% c("30% to 50% of monthly income", "More than 50% of monthly income")]), 1), 
+  "%) are housing cost burdened (spending 30% or more of income on housing)\n",
+  "- ", sum(housing_burden_data$n[housing_burden_data$housing_burden == "More than 50% of monthly income"]), 
+  " respondents (", 
+  round(housing_burden_data$proportion[housing_burden_data$housing_burden == "More than 50% of monthly income"], 1), 
+  "%) are severely housing cost burdened (spending more than 50% of income on housing)\n",
+  "- ", sum(housing_behind_data$n[housing_behind_data$housing_behind == "Yes"]), 
+  " respondents (", 
+  round(housing_behind_data$proportion[housing_behind_data$housing_behind == "Yes"], 1), 
+  "%) reported being behind on housing payments\n"
+))
+
+# Impact Funds
+cat("\n\n### Impact Fund Usage by Category:\n")
+knitr::kable(fund_uses, 
+             caption = "Impact Fund Usage by Category",
+             digits = 1)
+
+# Print summary with consistent decimal formatting
+cat("\n\n### Summary of Impact Fund Usage:\n")
+cat("- All respondents (", fund_use_count, ") provided information about how they used their impact funds\n", sep="")
+cat("- The most common uses were for essential needs:\n")
+cat("  * ", fund_uses$Percentage[1], "% used funds for ", fund_uses$Category[1], "\n", sep="")
+cat("  * ", fund_uses$Percentage[2], "% used funds for ", fund_uses$Category[2], "\n", sep="")
+cat("  * ", fund_uses$Percentage[3], "% used funds for ", fund_uses$Category[3], "\n", sep="")
+cat("- Financial management was also important, with ", 
+    fund_uses$Percentage[fund_uses$Category == "Debt and financial management"], 
+    "% using funds for debt repayment, savings, or investments\n", sep="")
+cat("- Some respondents also reported using funds for more forward-looking investments:\n")
+cat("  * ", fund_uses$Percentage[fund_uses$Category == "Education and/or professional development"], 
+    "% for education or professional development\n", sep="")
+cat("  * Other specific uses included saving for a car and startup costs\n")
+```

@@ -1,0 +1,2791 @@
+---
+title: "Longitudinal Analysis"
+author: "Jasleen"
+date: "2025-01-25"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: united
+    highlight: tango
+    code_folding: hide
+    fig_caption: true
+    df_print: paged
+  pdf_document:
+    toc: truevi
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,          # Show code
+  message = FALSE,       # Don't show messages
+  warning = FALSE,       # Don't show warnings
+  fig.align = "center",  # Center figures
+  out.width = "80%",     # Control figure width
+  fig.width = 10,        # Set figure width
+  fig.height = 6         # Set figure height
+)
+```
+Load required packages, read data, and match
+```{r libraries-datareading}
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+library(waffle)
+# library(treemap)
+library(RColorBrewer)
+# library(reshape2)
+
+setwd("/Users/marinatolchinsky/Library/CloudStorage/GoogleDrive-marina@uptogether.org/My Drive/Analytics/Hiring, Onboarding & PD/Data for Survey Analyst (Contract)/Jasleen")
+# Read the data
+baseline_df <- read.csv("austin_baseline_clean.csv")
+baseline_df <- baseline_df[-1, ]
+midline_df <- read.csv("midline_survey_final_cleaned.csv")
+
+# Match using external reference
+matched_ids <- intersect(baseline_df$ExternalReference, midline_df$externalreference_m)
+cat("\nNumber of matched respondents:", length(matched_ids), "\n")
+
+# Create matched baseline dataset
+baseline_matched <- baseline_df %>%
+  filter(ExternalReference %in% matched_ids)
+```
+
+## Race {.tabset}
+```{r race}
+# Calculate retention rates by race
+retention_by_race <- baseline_df %>%
+  mutate(
+    race_category = case_when(
+      grepl("Black or African American", demo_race) & !grepl(",", demo_race) ~ "Black or African American",
+      grepl("Hispanic or Latino", demo_race) & !grepl(",", demo_race) ~ "Hispanic or Latino",
+      grepl(",", demo_race) ~ "Multiracial",
+      demo_race == "Asian" ~ "Asian",
+      demo_race == "White" ~ "White",
+      demo_race == "Prefer not to answer" ~ "Prefer not to answer",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  group_by(race_category) %>%
+  summarise(
+    total = n(),
+    retained = sum(ExternalReference %in% matched_ids),
+    retention_rate = round((retained/total) * 100, 0)  
+  ) %>%
+  filter(race_category != "Other" & race_category != "Prefer not to answer") %>%
+  arrange(desc(retention_rate))
+
+# Calculate overall retention and sample sizes
+total_baseline <- nrow(baseline_df)
+total_retained <- sum(baseline_df$ExternalReference %in% matched_ids)
+overall_retention <- round((total_retained / total_baseline) * 100, 0)
+
+# Create visualization
+ggplot(retention_by_race, 
+       aes(x = reorder(race_category, retention_rate), 
+           y = retention_rate)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = sprintf("%d%%", retention_rate)), 
+            hjust = -0.2,
+            color = "black",
+            size = 6,  # Increased text size for percentage labels
+            family = "Arial",
+            fontface = "bold"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),  # Increased axis title size
+    axis.text = element_text(size = 16, family = "Arial", face = "bold"),   # Increased axis text size
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),  # Kept original title size
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold") # Kept original subtitle size
+  ) +
+  labs(
+    title = "Retention Rates by Race",
+    subtitle = sprintf("%d%% (%d out of %d) baseline respondents completed the midline survey", 
+                      overall_retention, total_retained, total_baseline),
+    x = "Race",
+    y = "Retention Rate (%)"
+  ) +
+  scale_y_continuous(
+    limits = c(0, max(retention_by_race$retention_rate) * 1.2),
+    labels = function(x) sprintf("%d%%", round(x, 0))
+  ) +
+  coord_flip()
+
+# Save with original dimensions but high DPI for clarity
+ggsave("racial_retention_rates.png", 
+       width = 10,    
+       height = 6,
+       dpi = 400)     
+
+print("Retention rates by race category:")
+print(retention_by_race)
+```
+
+## Gender {.tabset}
+```{r Gender}
+# Function to categorize gender with new labels
+categorize_gender <- function(sex_at_birth, gender) {
+  case_when(
+    sex_at_birth == "Male" & gender == "Male" ~ "Cisgender-Heterosexual",
+    sex_at_birth == "Female" & gender == "Female" ~ "Cisgender-Heterosexual",
+    sex_at_birth == "Male" & gender %in% c("Female", "Transgender", "Nonbinary", "None of these") ~ "LGBTQ+",
+    sex_at_birth == "Female" & gender %in% c("Male", "Transgender", "Nonbinary", "None of these") ~ "LGBTQ+",
+    sex_at_birth == "Prefer not to answer" ~ "Prefer not to answer",
+    TRUE ~ "Other"
+  )
+}
+
+# Calculate retention rates
+retention_analysis <- baseline_df %>%
+  mutate(
+    gender_category = categorize_gender(demo_sex_at_birth, demo_gender)
+  ) %>%
+  group_by(gender_category) %>%
+  summarise(
+    total = n(),
+    retained = sum(ExternalReference %in% midline_df$externalreference_m),
+    retention_rate = round(retained/total * 100, 0)  # Rounded to 0 decimal places
+  ) %>%
+  filter(gender_category != "Other")
+
+# Calculate overall numbers for subtitle
+total_baseline <- nrow(baseline_df)
+total_retained <- sum(baseline_df$ExternalReference %in% midline_df$externalreference_m)
+overall_retention <- round((total_retained / total_baseline) * 100, 0)
+
+# Create visualization
+ggplot(retention_analysis, 
+       aes(x = reorder(gender_category, retention_rate), 
+           y = retention_rate)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = sprintf("%d%%", retention_rate)), 
+            hjust = -0.2,
+            color = "black",
+            size = 6,
+            family = "Arial",
+            fontface = "bold"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    axis.text = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold")
+  ) +
+  labs(
+    title = "Retention Rates by Sexual Orientation and Gender Identity (SOGI)",
+    subtitle = sprintf("%d%% (%d out of %d) baseline respondents completed the midline survey",
+                      overall_retention, total_retained, total_baseline),
+    x = "SOGI Category",
+    y = "Retention Rate (%)"
+  ) +
+  scale_y_continuous(
+    limits = c(0, max(retention_analysis$retention_rate) * 1.2),
+    labels = function(x) sprintf("%d%%", round(x, 0))
+  ) +
+  coord_flip()
+
+# Save with original dimensions
+ggsave("sogi_retention_analysis.png", 
+       width = 10, 
+       height = 6, 
+       dpi = 400)
+
+# Print detailed statistics
+print("Retention Analysis by SOGI Category:")
+print(retention_analysis)
+```
+
+## Disability {.tabset}
+
+```{r disability}
+# Examine overall disability responses in matched sample
+cat("\nDisability Status Distribution (N=", nrow(baseline_matched), "):\n", sep="")
+print(table(baseline_matched$demo_disability))
+
+# Analyze each type of disability among those with disabilities
+disability_counts <- baseline_matched %>%
+  filter(demo_disability == "Yes") %>%
+  summarise(
+    vision = sum(demo_disab_vision == "Yes", na.rm = TRUE),
+    hearing = sum(demo_disab_hearing == "Yes", na.rm = TRUE),
+    memory = sum(demo_disab_memory == "Yes", na.rm = TRUE),
+    mobility = sum(demo_disab_mobility == "Yes", na.rm = TRUE),
+    self_care = sum(demo_disab_self_care == "Yes", na.rm = TRUE),
+    communication = sum(demo_disab_comm == "Yes", na.rm = TRUE),
+    long_covid = sum(demo_disab_covid == "Yes", na.rm = TRUE)
+  )
+
+# Calculate multiple disabilities
+multiple_disability_count <- baseline_matched %>%
+  filter(demo_disability == "Yes") %>%
+  rowwise() %>%
+  mutate(
+    disability_count = sum(
+      c_across(c(demo_disab_vision, demo_disab_hearing, 
+                 demo_disab_memory, demo_disab_mobility,
+                 demo_disab_self_care, demo_disab_comm,
+                 demo_disab_covid)) == "Yes",
+      na.rm = TRUE
+    )
+  )
+
+# Calculate key statistics
+total_respondents <- nrow(baseline_matched)
+total_with_disability <- sum(baseline_matched$demo_disability == "Yes", na.rm = TRUE)
+prefer_not_answer <- sum(baseline_matched$demo_disability == "Prefer not to answer", na.rm = TRUE)
+multiple_disabilities <- sum(multiple_disability_count$disability_count > 1)
+
+# Print detailed analysis with rounded percentages
+cat("\nDisability Demographics Analysis (N=", total_respondents, "):\n", sep="")
+cat("----------------------------------------\n")
+cat("Total respondents:", total_respondents, "\n")
+cat("Total with disability:", total_with_disability, "\n")
+cat("Percentage with disability:", round((total_with_disability/total_respondents)*100, 0), "%\n")
+cat("Number with multiple disabilities:", multiple_disabilities, "\n")
+cat("Percentage of those with disability who have multiple types:", 
+    round((multiple_disabilities/total_with_disability)*100, 0), "%\n")
+cat("Percentage who preferred not to answer:", 
+    round((prefer_not_answer/total_respondents)*100, 0), "%\n")
+
+# Print counts of each disability type
+cat(sprintf("\nCounts of each disability type (N=%d):\n", total_with_disability))
+print(disability_counts)
+
+# Create visualization data with rounded percentages
+disability_viz_data <- data.frame(
+  disability_type = c("Vision", "Hearing", "Memory", "Mobility", 
+                     "Self Care", "Communication", "Long COVID"),
+  count = as.numeric(as.matrix(disability_counts))
+) %>%
+  mutate(
+    percentage = round((count / total_with_disability) * 100, 0)
+  ) %>%
+  arrange(desc(percentage))
+
+# Print percentages for each disability type
+cat(sprintf("\nPercentages for each disability type (N=%d):\n", total_with_disability))
+for(i in 1:nrow(disability_viz_data)) {
+  cat(sprintf("%s: %d%%\n", 
+              disability_viz_data$disability_type[i], 
+              disability_viz_data$percentage[i]))
+}
+
+# Create visualization
+ggplot(disability_viz_data, 
+       aes(x = reorder(disability_type, -percentage), 
+           y = percentage)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = sprintf("%d%%", percentage)), 
+            vjust = -0.5, 
+            color = "black",
+            size = 6,
+            family = "Arial",
+            fontface = "bold"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    axis.text = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "Disability Types Among Members Living with Disability",
+    subtitle = sprintf("%d%% (%d out of %d) baseline respondents reported living with a disability",
+                      round((total_with_disability/total_respondents)*100, 0),
+                      total_with_disability, 
+                      total_respondents),
+    x = NULL,
+    y = "Percentage (%)"
+  ) +
+  scale_y_continuous(
+    limits = c(0, max(disability_viz_data$percentage) * 1.2),
+    labels = function(x) sprintf("%d%%", round(x, 0))
+  )
+
+# Save with original dimensions
+ggsave("disability_types_analysis.png", 
+       width = 10, 
+       height = 6, 
+       dpi = 400)
+```
+## Employment {.tabset}
+
+# Employment & Housing goals - MT add
+```{r}
+emp_goals <- filter(baseline_matched,stringr::str_detect(goals_select,"Changing my employment status")) %>% left_join(midline_df, by = c("ExternalReference" = "externalreference_m"))
+table(emp_goals$goals_job)
+
+table(emp_goals$work_new_m)
+table(emp_goals$emp_hours_change_m)
+
+housing_goals <- filter(baseline_matched,stringr::str_detect(goals_select,"housing")) %>% left_join(midline_df, by = c("ExternalReference" = "externalreference_m"))
+table(housing_goals$goals_house)
+housing_goals_move <- filter(housing_goals, goals_house=="Planning on moving to a new home")
+table(housing_goals_move$house_moved_m)
+```
+
+```{r employment}
+
+# Create employment status variables
+baseline_employment <- baseline_matched %>%
+  mutate(
+    baseline_status = case_when(
+      work == "Yes" ~ "Employed",
+      work == "No" ~ "Unemployed",
+      TRUE ~ "Unknown"
+    ),
+    baseline_type = case_when(
+      grepl("Full-time", work_type) ~ "Full-time",
+      grepl("Part-time", work_type) ~ "Part-time",
+      grepl("Both", work_type) ~ "Both",
+      TRUE ~ "NA"
+    ),
+    baseline_hours = as.numeric(case_when(
+      work_hours_per_week == "About how many hours per week do you work? Please give your best estimate between 1-100 hours." ~ NA_character_,
+      TRUE ~ work_hours_per_week
+    ))
+  )
+
+# Print baseline distributions with sample sizes
+cat(sprintf("\nBaseline Employment Status (N=%d):\n", nrow(baseline_employment)))
+print(table(baseline_employment$baseline_status))
+cat(sprintf("\nBaseline Employment Type (N=%d):\n", sum(baseline_employment$baseline_type != "NA")))
+print(table(baseline_employment$baseline_type))
+
+# Create midline employment status
+midline_employment <- midline_df %>%
+  mutate(
+    midline_status = case_when(
+      emp_status_m == "Yes" ~ "Employed",
+      emp_status_m == "No" ~ "Unemployed",
+      TRUE ~ "Unknown"
+    ),
+    midline_hours = as.numeric(gsub("[^0-9.]", "", emp_hours_m))
+  ) %>%
+  mutate(
+    midline_hours = case_when(
+      midline_hours < 0 ~ NA_real_,
+      midline_hours > 100 ~ NA_real_,
+      TRUE ~ midline_hours
+    )
+  )
+
+# Create transitions dataframe
+transitions <- baseline_employment %>%
+  left_join(midline_employment, by = c("ExternalReference" = "externalreference_m")) %>%
+  filter(baseline_status != "Unknown" & midline_status != "Unknown")
+
+# Calculate transition percentages
+transition_summary <- transitions %>%
+  group_by(baseline_status) %>%
+  summarise(
+    total_in_baseline = n(),
+    stayed_employed = sum(baseline_status == "Employed" & midline_status == "Employed"),
+    became_unemployed = sum(baseline_status == "Employed" & midline_status == "Unemployed"),
+    became_employed = sum(baseline_status == "Unemployed" & midline_status == "Employed"),
+    stayed_unemployed = sum(baseline_status == "Unemployed" & midline_status == "Unemployed")
+  ) %>%
+  mutate(
+    pct_stayed_employed = round(stayed_employed / total_in_baseline * 100, 0),
+    pct_became_unemployed = round(became_unemployed / total_in_baseline * 100, 0),
+    pct_became_employed = round(became_employed / total_in_baseline * 100, 0),
+    pct_stayed_unemployed = round(stayed_unemployed / total_in_baseline * 100, 0)
+  )
+
+cat(sprintf("\nEmployment Transition Summary (N=%d):\n", sum(transition_summary$total_in_baseline)))
+print(transition_summary)
+
+# Calculate hours change
+hours_change <- transitions %>%
+  filter(baseline_status == "Employed" & midline_status == "Employed") %>%
+  summarise(
+    n_with_hours = sum(!is.na(midline_hours - baseline_hours)),
+    avg_hours_change = round(mean(midline_hours - baseline_hours, na.rm = TRUE), 0),
+    median_hours_change = round(median(midline_hours - baseline_hours, na.rm = TRUE), 0)
+  )
+
+cat(sprintf("\nHours Change for Continuously Employed People (N=%d):\n", hours_change$n_with_hours))
+print(hours_change)
+
+# Create visualization data
+transitions_long <- transition_summary %>%
+  select(baseline_status, 
+         stayed_employed, became_unemployed,
+         became_employed, stayed_unemployed) %>%
+  pivot_longer(
+    cols = c(stayed_employed, became_unemployed,
+             became_employed, stayed_unemployed),
+    names_to = "transition_type",
+    values_to = "count"
+  ) %>%
+  filter(count > 0) %>%
+  mutate(
+    transition_label = case_when(
+      transition_type == "stayed_employed" ~ "Remained Employed",
+      transition_type == "became_unemployed" ~ "Became Unemployed",
+      transition_type == "became_employed" ~ "Became Employed",
+      transition_type == "stayed_unemployed" ~ "Remained Unemployed"
+    )
+  )
+
+# Create employment transitions visualization
+ggplot(transitions_long, 
+       aes(x = baseline_status, 
+           y = count, 
+           fill = transition_label)) +
+  geom_bar(stat = "identity", 
+           position = "stack",
+           width = 0.7) +
+  geom_text(aes(label = count),
+            position = position_stack(vjust = 0.5),
+            color = "white",
+            size = 6,
+            family = "Arial",
+            fontface = "bold") +
+  scale_fill_manual(values = c(
+    "Remained Employed" = "#D70073",
+    "Became Unemployed" = "#5E2D91FF",
+    "Became Employed" = "#46214A",
+    "Remained Unemployed" = "orange"
+  )) +
+  labs(
+    title = "Employment Status Transitions",
+    subtitle = sprintf("Changes between Baseline and Midline Surveys (N=%d)", 
+                      sum(transition_summary$total_in_baseline)),
+    x = "Initial Employment Status",
+    y = "Number of People",
+    fill = "Transition Type"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    axis.text = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold"),
+    legend.title = element_text(size = 14, family = "Arial", face = "bold"),
+    legend.text = element_text(size = 12, family = "Arial", face = "bold")
+  )
+
+# Save employment transitions plot
+ggsave("employment_transitions.png", 
+       width = 10, 
+       height = 6, 
+       dpi = 400)
+
+# Analyze reasons for unemployment
+total_unemployed <- transitions %>%
+  filter(baseline_status == "Employed" & midline_status == "Unemployed") %>%
+  nrow()
+
+unemployed_reasons <- transitions %>%
+  filter(baseline_status == "Employed" & midline_status == "Unemployed") %>%
+  group_by(emp_unemployed_reason_m) %>%
+  summarise(
+    count = n()
+  ) %>%
+  mutate(
+    percentage = round(count / total_unemployed * 100, 0)
+  ) %>%
+  arrange(desc(count))
+
+cat(sprintf("\nReasons for Becoming Unemployed (N=%d):\n", total_unemployed))
+print(unemployed_reasons)
+
+# Create unemployment reasons visualization
+ggplot(unemployed_reasons, 
+       aes(x = reorder(emp_unemployed_reason_m, count), 
+           y = count)) +
+  geom_bar(stat = "identity", 
+           fill = "#46214a", 
+           width = 0.7) +
+  geom_text(aes(label = sprintf("%d (%d%%)", count, percentage)),
+            vjust = -0.5,
+            size = 6,
+            family = "Arial",
+            fontface = "bold") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    axis.text = element_text(size = 16, family = "Arial", face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold")
+  ) +
+  labs(
+    title = "Reasons for Becoming Unemployed",
+    subtitle = sprintf("Total becoming unemployed: %d", total_unemployed),
+    x = NULL,
+    y = "Number of People"
+  )
+
+# Save unemployment reasons plot
+ggsave("unemployment_reasons.png", 
+       width = 10, 
+       height = 6, 
+       dpi = 400)
+```
+```{r, Sankey-plot1}
+library(tidyverse)
+library(networkD3)
+
+# Calculate transitions 
+transitions_summary <- transitions %>%
+  group_by(baseline_status, midline_status) %>%
+  summarise(value = n(), .groups = 'drop') %>%
+  mutate(
+    total_baseline = sum(value),
+    percentage = round((value / total_baseline) * 100, 0)
+  )
+
+# Print summary with sample size
+cat(sprintf("\nEmployment Transition Summary (N=%d):\n", sum(transitions_summary$value)))
+print(transitions_summary)
+
+# Create nodes dataframe with sample sizes
+baseline_employed <- sum(transitions_summary$value[transitions_summary$baseline_status == "Employed"])
+baseline_unemployed <- sum(transitions_summary$value[transitions_summary$baseline_status == "Unemployed"])
+midline_employed <- sum(transitions_summary$value[transitions_summary$midline_status == "Employed"])
+midline_unemployed <- sum(transitions_summary$value[transitions_summary$midline_status == "Unemployed"])
+
+nodes <- data.frame(
+  name = c(
+    sprintf("Employed Baseline\n(n=%d)", baseline_employed),
+    sprintf("Unemployed Baseline\n(n=%d)", baseline_unemployed),
+    sprintf("Employed Midline\n(n=%d)", midline_employed),
+    sprintf("Unemployed Midline\n(n=%d)", midline_unemployed)
+  )
+)
+
+# Create links dataframe
+links <- transitions_summary %>%
+  mutate(
+    source = case_when(
+      baseline_status == "Employed" ~ 0,
+      baseline_status == "Unemployed" ~ 1
+    ),
+    target = case_when(
+      midline_status == "Employed" ~ 2,
+      midline_status == "Unemployed" ~ 3
+    )
+  )
+
+# Create Sankey diagram 
+sankeyNetwork(Links = links, 
+              Nodes = nodes,
+              Source = "source",
+              Target = "target",
+              Value = "value",
+              NodeID = "name",
+              fontSize = 16,          
+              nodeWidth = 30,
+              sinksRight = TRUE,
+              height = 400,           # Increased height
+              width = 600,            # Increased width
+              colourScale = JS('d3.scaleOrdinal()
+                                .domain(["Employed Baseline", "Unemployed Baseline", 
+                                        "Employed Midline", "Unemployed Midline"])
+                                .range(["#46214A", "#D70073", "#46214A", "#D70073"])'),
+              nodePadding = 20,       # Increased padding
+              margin = list(          # Added margins
+                top = 20,
+                right = 20,
+                bottom = 20,
+                left = 20
+              )) %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      d3.select(el)
+        .selectAll('.node text')
+        .remove();  
+     }"
+  )
+
+# Save the diagram 
+saveNetwork(
+  sankeyNetwork(Links = links, 
+                Nodes = nodes,
+                Source = "source",
+                Target = "target",
+                Value = "value",
+                NodeID = "name",
+                fontSize = 16,
+                nodeWidth = 30,
+                sinksRight = TRUE,
+                height = 400,
+                width = 800,
+                colourScale = JS('d3.scaleOrdinal()
+                                  .domain(["Employed Baseline", "Unemployed Baseline", 
+                                          "Employed Midline", "Unemployed Midline"])
+                                  .range(["#46214A", "#D70073", "#46214A", "#D70073"])'),
+                nodePadding = 20,
+                margin = list(
+                  top = 20,
+                  right = 20,
+                  bottom = 20,
+                  left = 20
+                )),
+  "employment_sankey.html",
+  selfcontained = TRUE
+)
+
+library(webshot)
+webshot("employment_sankey.html", "employment_sankey.png", 
+        vwidth = 800, vheight = 400, delay = 0.5)
+
+```
+
+## Employment - Work Hours {.tabset}
+```{r,}
+#reasons for work hours change 
+# Analysis of work hours increases
+total_increase <- nrow(filter(midline_df, !is.na(emp_increase_m) & emp_increase_m != ""))
+
+hours_increase_table <- midline_df %>%
+  filter(!is.na(emp_increase_m) & emp_increase_m != "") %>%
+  group_by(emp_increase_m) %>%
+  summarise(
+    count = n()
+  ) %>%
+  mutate(
+    percentage = round(count / sum(count) * 100, 0)  # Changed to 0 decimals
+  ) %>%
+  arrange(desc(count))
+
+# Analysis of work hours decreases
+total_decrease <- nrow(filter(midline_df, !is.na(emp_decrease_m) & emp_decrease_m != ""))
+
+hours_decrease_table <- midline_df %>%
+  filter(!is.na(emp_decrease_m) & emp_decrease_m != "") %>%
+  group_by(emp_decrease_m) %>%
+  summarise(
+    count = n()
+  ) %>%
+  mutate(
+    percentage = round(count / sum(count) * 100, 0)  # Changed to 0 decimals
+  ) %>%
+  arrange(desc(count))
+
+# Print results with sample sizes
+cat(sprintf("\nReasons for Work Hours Increase (N=%d):\n", total_increase))
+print(hours_increase_table)
+
+cat(sprintf("\nReasons for Work Hours Decrease (N=%d):\n", total_decrease))
+print(hours_decrease_table)
+
+# Analysis of work hours changes for continuously employed people
+continuously_employed <- midline_df %>%
+  filter(externalreference_m %in% matched_ids & emp_status_m == "Yes")
+
+hours_change_summary <- continuously_employed %>%
+  group_by(emp_hours_change_m) %>%
+  summarise(
+    count = n()
+  ) %>%
+  mutate(
+    percentage = round(count / sum(count) * 100, 0),
+    total_n = sum(count)
+  ) %>%
+  arrange(desc(count))
+
+# Print results
+cat(sprintf("\nWork Hours Changes Among Continuously Employed (N=%d):\n", 
+            nrow(continuously_employed)))
+print(hours_change_summary)
+
+# Create a more formatted table
+hours_change_table <- continuously_employed %>%
+  group_by(emp_hours_change_m) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  mutate(
+    `Percentage (%)` = round(Count / sum(Count) * 100, 0),
+    Category = case_when(
+      emp_hours_change_m == "My work hours have stayed the same" ~ "Remained Same",
+      emp_hours_change_m == "My work hours have INCREASED" ~ "Increased",
+      emp_hours_change_m == "My work hours have DECREASED" ~ "Decreased",
+      TRUE ~ emp_hours_change_m
+    )
+  ) %>%
+  select(Category, Count, `Percentage (%)`) %>%
+  arrange(desc(Count))
+
+print(knitr::kable(hours_change_table, 
+                   caption = "Work Hours Changes Among Continuously Employed Members",
+                   align = c('l', 'c', 'c')))
+```
+```{r checks-work hours}
+# First, let's check the filters and numbers carefully
+print("Checking continuously employed:")
+continuously_employed_check <- midline_df %>%
+  filter(externalreference_m %in% matched_ids & emp_status_m == "Yes") %>%
+  summarise(
+    total = n(),
+    decreased = sum(emp_hours_change_m == "My work hours have DECREASED", na.rm = TRUE),
+    increased = sum(emp_hours_change_m == "My work hours have INCREASED", na.rm = TRUE),
+    same = sum(emp_hours_change_m == "My work hours have stayed the same", na.rm = TRUE)
+  )
+print(continuously_employed_check)
+
+# Now let's check who's providing reasons
+print("\nChecking decrease reasons:")
+decrease_reasons_check <- midline_df %>%
+  filter(!is.na(emp_decrease_m) & emp_decrease_m != "") %>%
+  summarise(
+    total_giving_reasons = n(),
+    matched_and_employed = sum(externalreference_m %in% matched_ids & emp_status_m == "Yes")
+  )
+print(decrease_reasons_check)
+
+# Modified analysis for decrease reasons - only for continuously employed
+hours_decrease_table_fixed <- midline_df %>%
+  filter(externalreference_m %in% matched_ids & 
+         emp_status_m == "Yes" &
+         emp_hours_change_m == "My work hours have DECREASED") %>%
+  filter(!is.na(emp_decrease_m) & emp_decrease_m != "") %>%
+  group_by(emp_decrease_m) %>%
+  summarise(
+    count = n()
+  ) %>%
+  mutate(
+    percentage = round(count / sum(count) * 100, 0)
+  ) %>%
+  arrange(desc(count))
+
+# Print the fixed results
+cat("\nReasons for Work Hours Decrease (Among Continuously Employed Only):\n")
+print(hours_decrease_table_fixed)
+```
+
+## Income and Affordability {.tabset}
+```{r,}
+# 1. Financial Difficulty Changes
+financial_difficulty_analysis <- baseline_matched %>%
+  mutate(
+    baseline_difficulty = case_when(
+      grepl("Very difficult", expenses_difficulty) ~ "Very difficult",
+      grepl("Somewhat difficult", expenses_difficulty) ~ "Somewhat difficult",
+      grepl("A little difficult", expenses_difficulty) ~ "A little difficult",
+      grepl("Not at all difficult", expenses_difficulty) ~ "Not at all difficult",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(baseline_difficulty)) %>%
+  group_by(baseline_difficulty) %>%
+  summarise(
+    count = n(),
+    percentage = round(n() / sum(!is.na(baseline_matched$expenses_difficulty)) * 100, 0)
+  ) %>%
+  mutate(time = "Baseline")
+
+midline_difficulty_analysis <- midline_df %>%
+  mutate(
+    midline_difficulty = case_when(
+      grepl("Very difficult", fin_expense_difficulty_m) ~ "Very difficult",
+      grepl("Somewhat difficult", fin_expense_difficulty_m) ~ "Somewhat difficult",
+      grepl("A little difficult", fin_expense_difficulty_m) ~ "A little difficult",
+      grepl("Not at all difficult", fin_expense_difficulty_m) ~ "Not at all difficult",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(midline_difficulty)) %>%
+  group_by(midline_difficulty) %>%
+  summarise(
+    count = n(),
+    percentage = round(n() / sum(!is.na(midline_df$fin_expense_difficulty_m)) * 100, 0)
+  ) %>%
+  rename(baseline_difficulty = midline_difficulty) %>%
+  mutate(time = "Midline")
+
+# Combine the data
+combined_data <- bind_rows(financial_difficulty_analysis, midline_difficulty_analysis) %>%
+  mutate(baseline_difficulty = factor(baseline_difficulty, 
+                                    levels = c("Not at all difficult",
+                                             "A little difficult",
+                                             "Somewhat difficult",
+                                             "Very difficult")))
+
+# Create the stacked bar chart
+ggplot(combined_data, 
+       aes(x = time, y = percentage, fill = baseline_difficulty)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  scale_fill_manual(values = c("Not at all difficult" = "#5E2D91",
+                              "A little difficult" = "#D70073",
+                              "Somewhat difficult" = "#F15B41",
+                              "Very difficult" = "#46214A")) +
+  labs(title = "Changes in Financial Difficulty Between Surveys",
+       x = "",
+       y = "Percentage",
+       fill = "Difficulty Level") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "right",
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    axis.text = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    legend.title = element_text(size = 14, family = "Arial", face = "bold"),
+    legend.text = element_text(size = 12, family = "Arial")
+  ) +
+  geom_text(aes(label = sprintf("%d%%", percentage)),
+            position = position_stack(vjust = 0.5),
+            size = 6,
+            family = "Arial",
+            fontface = "bold",
+            color = "white")
+
+# Save the plot
+ggsave("financial_difficulty_changes.png", 
+       width = 10, 
+       height = 6, 
+       dpi = 300)
+
+# Print full analysis
+cat(sprintf("\nFinancial Difficulty Analysis - Baseline (N=%d):\n", 
+            sum(!is.na(baseline_matched$expenses_difficulty))))
+print(financial_difficulty_analysis)
+cat(sprintf("\nFinancial Difficulty Analysis - Midline (N=%d):\n", 
+            sum(!is.na(midline_df$fin_expense_difficulty_m))))
+print(midline_difficulty_analysis)
+
+#FOR MATCHED INDIVIDUALS
+# Create a transition analysis for matched respondents
+financial_transitions <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  mutate(
+    baseline_difficulty = case_when(
+      grepl("Very difficult", expenses_difficulty) ~ "Very difficult",
+      grepl("Somewhat difficult", expenses_difficulty) ~ "Somewhat difficult",
+      grepl("A little difficult", expenses_difficulty) ~ "A little difficult",
+      grepl("Not at all difficult", expenses_difficulty) ~ "Not at all difficult",
+      TRUE ~ NA_character_
+    ),
+    midline_difficulty = case_when(
+      grepl("Very difficult", fin_expense_difficulty_m) ~ "Very difficult",
+      grepl("Somewhat difficult", fin_expense_difficulty_m) ~ "Somewhat difficult",
+      grepl("A little difficult", fin_expense_difficulty_m) ~ "A little difficult",
+      grepl("Not at all difficult", fin_expense_difficulty_m) ~ "Not at all difficult",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(baseline_difficulty) & !is.na(midline_difficulty))
+
+# Create transition matrix
+transition_matrix <- financial_transitions %>%
+  group_by(baseline_difficulty, midline_difficulty) %>%
+  summarise(
+    count = n(),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    baseline_total = sum(count[baseline_difficulty == baseline_difficulty]),
+    percentage = round(count / baseline_total * 100, 0)
+  )
+
+# Create summary of improvements/deteriorations
+difficulty_levels <- c("Not at all difficult" = 1, 
+                      "A little difficult" = 2,
+                      "Somewhat difficult" = 3, 
+                      "Very difficult" = 4)
+
+transition_summary <- financial_transitions %>%
+  mutate(
+    baseline_score = difficulty_levels[baseline_difficulty],
+    midline_score = difficulty_levels[midline_difficulty],
+    change = case_when(
+      midline_score < baseline_score ~ "Improved",
+      midline_score > baseline_score ~ "Worsened",
+      midline_score == baseline_score ~ "No Change"
+    )
+  ) %>%
+  group_by(change) %>%
+  summarise(
+    count = n(),
+    percentage = round(count / nrow(financial_transitions) * 100, 0)
+  )
+
+# Print results
+cat(sprintf("\nDetailed Transition Matrix (N=%d):\n", nrow(financial_transitions)))
+print(transition_matrix)
+
+cat(sprintf("\nOverall Change Summary (N=%d):\n", nrow(financial_transitions)))
+print(transition_summary)
+
+# Print specific transitions of interest
+cat(sprintf("\nDetailed transitions from each baseline category (N=%d):\n", 
+            nrow(financial_transitions)))
+for(difficulty in unique(financial_transitions$baseline_difficulty)) {
+  cat("\nStarting from", difficulty, ":\n")
+  transitions <- transition_matrix %>%
+    filter(baseline_difficulty == difficulty) %>%
+    arrange(desc(count))
+  print(transitions)
+}
+
+# 5. Analyze food insufficiency changes with binary categories
+food_changes <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  mutate(
+    baseline_food = case_when(
+      grepl("Enough of the kinds|Enough, but not always", wb_food_enough) ~ "Food Sufficient",
+      grepl("Sometimes not enough|Often not enough", wb_food_enough) ~ "Food Insufficient",
+      TRUE ~ NA_character_
+    ),
+    midline_food = case_when(
+      grepl("Enough of the kinds|Enough, but not always", wb_food_security_m) ~ "Food Sufficient",
+      grepl("Sometimes not enough|Often not enough", wb_food_security_m) ~ "Food Insufficient",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  summarise(
+    baseline_total = sum(!is.na(baseline_food)),
+    baseline_sufficient = sum(baseline_food == "Food Sufficient", na.rm = TRUE),
+    baseline_insufficient = sum(baseline_food == "Food Insufficient", na.rm = TRUE),
+    
+    baseline_sufficient_pct = round(baseline_sufficient / baseline_total * 100, 0),
+    baseline_insufficient_pct = round(baseline_insufficient / baseline_total * 100, 0),
+    
+    midline_total = sum(!is.na(midline_food)),
+    midline_sufficient = sum(midline_food == "Food Sufficient", na.rm = TRUE),
+    midline_insufficient = sum(midline_food == "Food Insufficient", na.rm = TRUE),
+    
+    midline_sufficient_pct = round(midline_sufficient / midline_total * 100, 0),
+    midline_insufficient_pct = round(midline_insufficient / midline_total * 100, 0)
+  )
+
+# Create long format data for plotting
+food_long <- bind_rows(
+  tibble(
+    time = "Baseline",
+    status = c("Food Sufficient", "Food Insufficient"),
+    count = c(food_changes$baseline_sufficient, food_changes$baseline_insufficient),
+    percentage = c(food_changes$baseline_sufficient_pct, food_changes$baseline_insufficient_pct)
+  ),
+  tibble(
+    time = "Midline",
+    status = c("Food Sufficient", "Food Insufficient"),
+    count = c(food_changes$midline_sufficient, food_changes$midline_insufficient),
+    percentage = c(food_changes$midline_sufficient_pct, food_changes$midline_insufficient_pct)
+  )
+) %>%
+  mutate(status = factor(status, levels = c("Food Sufficient", "Food Insufficient")))
+
+# Create stacked bar plot
+ggplot(food_long, aes(x = time, y = percentage, fill = status)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  scale_fill_manual(values = c("Food Sufficient" = "#46214A",
+                              "Food Insufficient" = "#D70073")) +
+  labs(title = "Changes in Food Security Between Surveys",
+       x = "",
+       y = "Percentage",
+       fill = "Food Security Status") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "right",
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    axis.text = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    legend.title = element_text(size = 14, family = "Arial", face = "bold"),
+    legend.text = element_text(size = 12, family = "Arial")
+  ) +
+  geom_text(aes(label = sprintf("%d%%", percentage)),
+            position = position_stack(vjust = 0.5),
+            size = 6,
+            family = "Arial",
+            fontface = "bold",
+            color = "white")
+
+# Save the food security plot
+ggsave("food_security_changes.png", 
+       width = 10, 
+       height = 6, 
+       dpi = 300)
+
+# Print detailed results
+cat(sprintf("\nFood Security Analysis - Baseline (N=%d):\n", food_changes$baseline_total))
+print(select(food_changes, starts_with("baseline")))
+cat(sprintf("\nFood Security Analysis - Midline (N=%d):\n", food_changes$midline_total))
+print(select(food_changes, starts_with("midline")))
+```
+## Food Insuffciency {.tabset}
+
+```{r food-insufficency}
+# This is the previous analysis wehre food insifficency was divided into 4 parts
+# I have not deleted it, because this division shows nuanced changed between baseline and midline which the two part change does not show
+
+# 5. Analyze food insufficiency changes
+food_changes <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  mutate(
+    baseline_food = case_when(
+      grepl("Enough of the kinds", wb_food_enough) ~ "Always enough food",
+      grepl("Enough, but not always", wb_food_enough) ~ "Enough food, not preferred types",
+      grepl("Sometimes not enough", wb_food_enough) ~ "Sometimes insufficient",
+      grepl("Often not enough", wb_food_enough) ~ "Often insufficient",
+      TRUE ~ "Other"
+    ),
+    midline_food = case_when(
+      grepl("Enough of the kinds", wb_food_security_m) ~ "Always enough food",
+      grepl("Enough, but not always", wb_food_security_m) ~ "Enough food, not preferred types",
+      grepl("Sometimes not enough", wb_food_security_m) ~ "Sometimes insufficient",
+      grepl("Often not enough", wb_food_security_m) ~ "Often insufficient",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  summarise(
+    # Baseline counts and percentages
+    baseline_total = n(),
+    baseline_always = sum(baseline_food == "Always enough food", na.rm = TRUE),
+    baseline_enough_not_preferred = sum(baseline_food == "Enough food, not preferred types", na.rm = TRUE),
+    baseline_sometimes = sum(baseline_food == "Sometimes insufficient", na.rm = TRUE),
+    baseline_often = sum(baseline_food == "Often insufficient", na.rm = TRUE),
+    
+    # Calculate baseline percentages
+    baseline_always_pct = round(baseline_always / baseline_total * 100, 0),
+    baseline_enough_not_preferred_pct = round(baseline_enough_not_preferred / baseline_total * 100, 0),
+    baseline_sometimes_pct = round(baseline_sometimes / baseline_total * 100, 0),
+    baseline_often_pct = round(baseline_often / baseline_total * 100, 0),
+    
+    # Midline counts and percentages
+    midline_total = sum(!is.na(midline_food)),
+    midline_always = sum(midline_food == "Always enough food", na.rm = TRUE),
+    midline_enough_not_preferred = sum(midline_food == "Enough food, not preferred types", na.rm = TRUE),
+    midline_sometimes = sum(midline_food == "Sometimes insufficient", na.rm = TRUE),
+    midline_often = sum(midline_food == "Often insufficient", na.rm = TRUE),
+    
+    # Calculate midline percentages
+    midline_always_pct = round(midline_always / midline_total * 100, 0),
+    midline_enough_not_preferred_pct = round(midline_enough_not_preferred / midline_total * 100, 0),
+    midline_sometimes_pct = round(midline_sometimes / midline_total * 100, 0),
+    midline_often_pct = round(midline_often / midline_total * 100, 0)
+  )
+
+# Create long format data for plotting
+food_long <- bind_rows(
+  tibble(
+    time = "Baseline",
+    status = c("Always enough food", "Enough food, not preferred types", 
+               "Sometimes insufficient", "Often insufficient"),
+    count = c(food_changes$baseline_always, food_changes$baseline_enough_not_preferred,
+              food_changes$baseline_sometimes, food_changes$baseline_often),
+    percentage = c(food_changes$baseline_always_pct, food_changes$baseline_enough_not_preferred_pct,
+                  food_changes$baseline_sometimes_pct, food_changes$baseline_often_pct)
+  ),
+  tibble(
+    time = "Midline",
+    status = c("Always enough food", "Enough food, not preferred types", 
+               "Sometimes insufficient", "Often insufficient"),
+    count = c(food_changes$midline_always, food_changes$midline_enough_not_preferred,
+              food_changes$midline_sometimes, food_changes$midline_often),
+    percentage = c(food_changes$midline_always_pct, food_changes$midline_enough_not_preferred_pct,
+                  food_changes$midline_sometimes_pct, food_changes$midline_often_pct)
+  )
+) %>%
+  mutate(status = factor(status, 
+                        levels = c("Always enough food", "Enough food, not preferred types", 
+                                 "Sometimes insufficient", "Often insufficient")))
+
+# Create stacked bar plot
+ggplot(food_long, aes(x = time, y = percentage, fill = status)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  scale_fill_manual(values = c("Always enough food" = "#46214A",
+                              "Enough food, not preferred types" = "#5E2D91",
+                              "Sometimes insufficient" = "#F15B41",
+                              "Often insufficient" = "#D70073")) +
+  labs(title = "Changes in Food Insufficiency Between Surveys",
+       subtitle = "Distribution of reported food access at baseline and midline",
+       x = "",
+       y = "Percentage",
+       fill = "Food Access Status") +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 10),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 9)
+  ) +
+  geom_text(aes(label = sprintf("%d%%", round(percentage, 0))),  # Rounded percentage labels
+            position = position_stack(vjust = 0.5),
+            size = 3.5,
+            color = "white")
+
+# Print detailed results
+print("Food Insufficiency Analysis:")
+print(food_changes)
+```
+
+## Housing {.tabset}
+ 
+```{r housing}
+# 1. Changes in Housing Situation (with regrouped categories)
+housing_changes <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  mutate(
+    baseline_housing = case_when(
+      grepl("No fixed residence|Temporary housing", housing_situation) ~ "Homeless/Temporary",
+      grepl("Rented", housing_situation) ~ "Rented",
+      grepl("Owned", housing_situation) ~ "Owned",
+      TRUE ~ "Other"
+    ),
+    midline_housing = case_when(
+      grepl("No fixed residence|Temporary housing", house_status_m) ~ "Homeless/Temporary",
+      grepl("Rented", house_status_m) ~ "Rented",
+      grepl("Owned", house_status_m) ~ "Owned",
+      TRUE ~ "Other"
+    )
+  )
+
+# Housing situation transitions with percentages
+total_responses <- nrow(housing_changes)
+housing_transitions <- housing_changes %>%
+  group_by(baseline_housing, midline_housing) %>%
+  summarise(
+    count = n(),
+    percentage = round(count / total_responses * 100, 0),
+    display = paste0(count, " (", percentage, "%)"),
+    .groups = 'drop'
+  ) %>%
+  arrange(baseline_housing, midline_housing)
+
+cat(sprintf("\nHousing Situation Transitions (N=%d):\n", total_responses))
+print(housing_transitions)
+
+# 2. Changes in Rental/Mortgage Payment Status
+payment_changes <- housing_changes %>%
+  mutate(
+    baseline_behind = case_when(
+      housing_behind == "Yes" ~ "Caught up",
+      housing_behind == "No" ~ "Behind",
+      TRUE ~ "Unknown"
+    ),
+    midline_behind = case_when(
+      house_payments_behind_m == "Yes" ~ "Caught up",
+      house_payments_behind_m == "No" ~ "Behind",
+      TRUE ~ "Unknown"
+    )
+  ) %>%
+  group_by(baseline_behind, midline_behind) %>%
+  summarise(
+    count = n(),
+    percentage = round(count / total_responses * 100, 0),
+    display = paste0(count, " (", percentage, "%)"),
+    .groups = 'drop'
+  )
+
+cat(sprintf("\nPayment Status Changes (N=%d):\n", total_responses))
+print(payment_changes)
+
+# 3. Housing Burden Changes
+burden_changes <- housing_changes %>%
+  mutate(
+    baseline_burden = case_when(
+      grepl("Less than 30%", housing_burden) ~ "Low burden",
+      grepl("30% to 50%", housing_burden) ~ "Medium burden",
+      grepl("More than 50%", housing_burden) ~ "High burden",
+      TRUE ~ "Unknown"
+    ),
+    midline_burden = case_when(
+      grepl("Less than 30%", house_burden_m) ~ "Low burden",
+      grepl("30% to 50%", house_burden_m) ~ "Medium burden",
+      grepl("More than 50%", house_burden_m) ~ "High burden",
+      TRUE ~ "Unknown"
+    )
+  ) %>%
+  group_by(baseline_burden, midline_burden) %>%
+  summarise(
+    count = n(),
+    percentage = round(count / total_responses * 100, 0),
+    display = paste0(count, " (", percentage, "%)"),
+    .groups = 'drop'
+  )
+
+cat(sprintf("\nHousing Burden Changes (N=%d):\n", total_responses))
+print(burden_changes)
+
+  
+###Explore situation of members who newly report high burden at midline
+names(housing_changes)
+new_high_burden <- housing_changes %>%
+       filter(
+      house_burden_m == "More than 50% of monthly income" & 
+      (housing_burden != "More than 50% of monthly income" | is.na(housing_burden))) %>%
+    select(house_burden_m,
+           housing_burden,
+           benefits_reduce_m,
+           benefits_reduce_text_m,
+           fin_emergency_fund_m,
+           cost_increase_m,
+           work,
+           emp_status_m,
+           work_new_m,
+            house_moved_m,
+            housing_behind,
+            house_payments_behind_m,
+            emp_hours_change_m,
+            house_moved_m,
+            move_reason_positive_m,
+            move_reason_negative_m,
+            house_move_reason_m,
+            impact_fund_specific_m,
+            impact_ripple_fam_m,
+            impact_ripple_comm_m,
+            baseline_housing,
+            midline_housing)
+
+
+# 4. Analysis of Recent Moves
+# Function to calculate move percentages - handles both baseline and midline
+calculate_move_stats <- function(data, total, is_midline = FALSE) {
+  if (is_midline) {
+    # Midline column names
+    data %>%
+      summarise(
+        total_moved = sum(house_moved_m == "Yes", na.rm = TRUE),
+        moved_positive = sum(!is.na(move_reason_positive_m) & move_reason_positive_m != "", na.rm = TRUE),
+        moved_negative = sum(!is.na(move_reason_negative_m) & move_reason_negative_m != "", na.rm = TRUE)
+      )
+  } else {
+    # Baseline column names
+    data %>%
+      summarise(
+        total_moved = sum(moved_last_year == "Yes", na.rm = TRUE),
+        moved_positive = sum(!is.na(move_reason_positive) & move_reason_positive != "", na.rm = TRUE),
+        moved_negative = sum(!is.na(move_reason_negative) & move_reason_negative != "", na.rm = TRUE)
+      )
+  } %>%
+    mutate(
+      pct_moved = round(total_moved / total * 100, 0),
+      pct_positive = round(moved_positive / total_moved * 100, 0),
+      pct_negative = round(moved_negative / total_moved * 100, 0),
+      moved_display = paste0(total_moved, " (", pct_moved, "%)"),
+      positive_display = paste0(moved_positive, " (", pct_positive, "%)"),
+      negative_display = paste0(moved_negative, " (", pct_negative, "%)")
+    )
+}
+
+# Calculate baseline and midline move statistics
+baseline_moves <- calculate_move_stats(baseline_matched, nrow(baseline_matched), is_midline = FALSE)
+midline_moves <- calculate_move_stats(midline_df, nrow(midline_df), is_midline = TRUE)
+
+cat(sprintf("\nMove Analysis - Baseline (N=%d):\n", nrow(baseline_matched)))
+print(baseline_moves)
+cat(sprintf("\nMove Analysis - Midline (N=%d):\n", nrow(midline_df)))
+print(midline_moves)
+
+# 5. Reasons for Moving
+# Function to summarize moving reasons with percentages - corrected for multiple selections
+summarize_reasons <- function(data, reason_col, total_moves) {
+  reasons <- unlist(strsplit(as.character(data[[reason_col]]), ","))
+  reasons <- reasons[reasons != ""]
+  reason_table <- table(trimws(reasons))  # trim whitespace
+  reason_df <- data.frame(
+    Reason = names(reason_table),
+    Count = as.numeric(reason_table)
+  ) %>%
+    mutate(
+      Percentage = round(Count / total_moves * 100, 0),
+      Display = paste0(Count, " (", Percentage, "%)")
+    )
+  return(reason_df)
+}
+
+# Calculate and print baseline reasons
+cat(sprintf("\nBaseline Moving Reasons (N=%d moves):\n", baseline_moves$total_moved))
+cat("\nPositive reasons:\n")
+positive_reasons_baseline <- summarize_reasons(
+  baseline_matched, 
+  "move_reason_positive", 
+  baseline_moves$total_moved
+)
+print(positive_reasons_baseline)
+
+cat("\nNegative reasons:\n")
+negative_reasons_baseline <- summarize_reasons(
+  baseline_matched, 
+  "move_reason_negative", 
+  baseline_moves$total_moved
+)
+print(negative_reasons_baseline)
+
+# Calculate and print midline reasons
+cat(sprintf("\nMidline Moving Reasons (N=%d moves):\n", midline_moves$total_moved))
+cat("\nPositive reasons:\n")
+positive_reasons_midline <- summarize_reasons(
+  midline_df, 
+  "move_reason_positive_m", 
+  midline_moves$total_moved
+)
+print(positive_reasons_midline)
+
+cat("\nNegative reasons:\n")
+negative_reasons_midline <- summarize_reasons(
+  midline_df, 
+  "move_reason_negative_m", 
+  midline_moves$total_moved
+)
+print(negative_reasons_midline)
+```
+
+```{r housing-burden-move}
+# Analyze burden changes in relation to moves
+housing_burden_moves <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  mutate(
+    # First create the burden categories using your existing logic
+    baseline_burden = case_when(
+      grepl("Less than 30%", housing_burden) ~ "Low burden",
+      grepl("30% to 50%", housing_burden) ~ "Medium burden",
+      grepl("More than 50%", housing_burden) ~ "High burden",
+      TRUE ~ "Unknown"
+    ),
+    midline_burden = case_when(
+      grepl("Less than 30%", house_burden_m) ~ "Low burden",
+      grepl("30% to 50%", house_burden_m) ~ "Medium burden",
+      grepl("More than 50%", house_burden_m) ~ "High burden",
+      TRUE ~ "Unknown"
+    ),
+    # Then categorize the changes
+    burden_change = case_when(
+      baseline_burden == "High burden" & midline_burden == "High burden" ~ "Remained High",
+      baseline_burden != "High burden" & midline_burden == "High burden" ~ "New High Burden",
+      baseline_burden == "High burden" & midline_burden %in% c("Medium burden", "Low burden") ~ "Improved",
+      TRUE ~ "Other"
+    ),
+    # Moving status
+    moved = house_moved_m == "Yes"
+  ) %>%
+  group_by(burden_change, moved) %>%
+  summarise(
+    count = n(),
+    .groups = 'drop'
+  )
+
+# Look at reasons for those who moved
+moved_burden_reasons <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  filter(house_moved_m == "Yes") %>%
+  mutate(
+    baseline_burden = case_when(
+      grepl("Less than 30%", housing_burden) ~ "Low burden",
+      grepl("30% to 50%", housing_burden) ~ "Medium burden",
+      grepl("More than 50%", housing_burden) ~ "High burden",
+      TRUE ~ "Unknown"
+    ),
+    midline_burden = case_when(
+      grepl("Less than 30%", house_burden_m) ~ "Low burden",
+      grepl("30% to 50%", house_burden_m) ~ "Medium burden",
+      grepl("More than 50%", house_burden_m) ~ "High burden",
+      TRUE ~ "Unknown"
+    )
+  ) %>%
+  group_by(baseline_burden, midline_burden, move_reason_positive_m, move_reason_negative_m) %>%
+  summarise(
+    count = n(),
+    .groups = 'drop'
+  )
+
+print("Housing Burden Changes by Moving Status:")
+print(housing_burden_moves)
+
+print("\nDetailed Analysis of Those Who Moved:")
+print(moved_burden_reasons)
+```
+
+## Caregiving {.tabset}
+
+```{r caregiving}
+# 1. Analyze change in caregiving responsibilities among matched respondents
+caregiving_changes <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  summarise(
+    baseline_caregivers = sum(care_under_18 == "Yes", na.rm = TRUE),
+    midline_caregivers = sum(cc_has_children_m == "Yes", na.rm = TRUE),
+    total_matched = n(),
+    baseline_caregivers_pct = round(baseline_caregivers / total_matched * 100, 0),
+    midline_caregivers_pct = round(midline_caregivers / total_matched * 100, 0)
+  )
+
+children_range_count <- baseline_matched %>%
+  separate_rows(children_range, sep = ",") %>%  
+  count(children_range) %>%
+  mutate(percent_respondents = n/sum(!is.na(baseline_matched$care_under_18)))
+
+
+# 2. Analyze enrollment changes among those with caregiving responsibilities
+childcare_changes <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  filter(care_under_18 == "Yes" | cc_has_children_m == "Yes") %>%
+  summarise(
+    total_caregivers = n(),
+    
+    # Under 5 enrollment
+    baseline_under5_enrolled = sum(under_5_enroll == "Yes, enrolled in daycare or preschool", na.rm = TRUE),
+    midline_under5_enrolled = sum(cc_under5_care_m == "Yes, enrolled in daycare or preschool", na.rm = TRUE),
+    baseline_under5_total = sum(!is.na(under_5_enroll)),
+    midline_under5_total = sum(!is.na(cc_under5_care_m)),
+    baseline_under5_pct = round(baseline_under5_enrolled / baseline_under5_total * 100, 0),
+    midline_under5_pct = round(midline_under5_enrolled / midline_under5_total * 100, 0),
+    
+    # 5-11 enrollment
+    baseline_5to11_enrolled = sum(above_5_enroll == "Yes, enrolled in an after-school care program", na.rm = TRUE),
+    midline_5to11_enrolled = sum(cc_5to12_care_m == "Yes, enrolled in an after-school care program", na.rm = TRUE),
+    baseline_5to11_total = sum(!is.na(above_5_enroll)),
+    midline_5to11_total = sum(!is.na(cc_5to12_care_m)),
+    baseline_5to11_pct = round(baseline_5to11_enrolled / baseline_5to11_total * 100, 0),
+    midline_5to11_pct = round(midline_5to11_enrolled / midline_5to11_total * 100, 0),
+    
+    # 12-17 enrollment
+    baseline_12plus_enrolled = sum(above_12_enroll == "Yes, actively involved in extracurricular activities or programs", na.rm = TRUE),
+    midline_12plus_enrolled = sum(cc_above12_care_m == "Yes, actively involved in extracurricular activities or programs", na.rm = TRUE),
+    baseline_12plus_total = sum(!is.na(above_12_enroll)),
+    midline_12plus_total = sum(!is.na(cc_above12_care_m)),
+    baseline_12plus_pct = round(baseline_12plus_enrolled / baseline_12plus_total * 100, 0),
+    midline_12plus_pct = round(midline_12plus_enrolled / midline_12plus_total * 100, 0)
+  )
+
+# 3. Analyze improvements
+childcare_improvements <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  filter(!is.na(childcare_better_m) & childcare_better_m != "") %>%
+  summarise(
+    total_improvements = n(),
+    better_quality = sum(grepl("better quality", childcare_better_m, ignore.case = TRUE), na.rm = TRUE),
+    better_quality_pct = round(better_quality / n() * 100, 0),
+    better_hours = sum(grepl("hours and times", childcare_better_m, ignore.case = TRUE), na.rm = TRUE),
+    better_hours_pct = round(better_hours / n() * 100, 0),
+    more_support = sum(grepl("more support", childcare_better_m, ignore.case = TRUE), na.rm = TRUE),
+    more_support_pct = round(more_support / n() * 100, 0)
+  )
+
+# 4. Analyze challenges
+childcare_challenges <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  filter(!is.na(childcare_worse_m) & childcare_worse_m != "") %>%
+  summarise(
+    total_challenges = n(),
+    more_expensive = sum(grepl("more expensive", childcare_worse_m, ignore.case = TRUE), na.rm = TRUE),
+    more_expensive_pct = round(more_expensive / n() * 100, 0),
+    difficulty_finding = sum(grepl("difficulty finding", childcare_worse_m, ignore.case = TRUE), na.rm = TRUE),
+    difficulty_finding_pct = round(difficulty_finding / n() * 100, 0),
+    fewer_options = sum(grepl("fewer", childcare_worse_m, ignore.case = TRUE), na.rm = TRUE),
+    fewer_options_pct = round(fewer_options / n() * 100, 0)
+  )
+
+# Analyze baseline challenges with common themes
+baseline_challenges <- baseline_matched %>%
+  filter(!is.na(child_care_challenge) & 
+         child_care_challenge != "" & 
+         !child_care_challenge %in% c("No", "None", "not at this time", "N/a")) %>%
+  mutate(
+    child_care_challenge = as.character(child_care_challenge),
+    has_cost_concern = grepl("cost|expensive|financial|money|payment", child_care_challenge, ignore.case = TRUE),
+    has_resource_need = grepl("food|resources|support", child_care_challenge, ignore.case = TRUE),
+    has_transport_concern = grepl("transport", child_care_challenge, ignore.case = TRUE),
+    has_program_need = grepl("program|activit|school", child_care_challenge, ignore.case = TRUE)
+  ) %>%
+  summarise(
+    total_responses = n(),
+    cost_concerns = sum(has_cost_concern),
+    cost_pct = round(cost_concerns/total_responses * 100, 0),
+    resource_needs = sum(has_resource_need),
+    resource_pct = round(resource_needs/total_responses * 100, 0),
+    transport_concerns = sum(has_transport_concern),
+    transport_pct = round(transport_concerns/total_responses * 100, 0),
+    program_needs = sum(has_program_need),
+    program_pct = round(program_needs/total_responses * 100, 0)
+  )
+
+# Get representative quotes
+representative_quotes <- baseline_matched %>%
+  filter(!is.na(child_care_challenge) & 
+         child_care_challenge != "" & 
+         !child_care_challenge %in% c("No", "None", "not at this time", "N/a")) %>%
+  select(child_care_challenge) %>%
+  pull()
+
+# 6. Cost impact
+cost_impact <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  filter(!is.na(cc_cost_m)) %>%
+  group_by(cc_cost_m) %>%
+  summarise(
+    count = n(),
+    percentage = round(count/sum(count)*100, 0)
+  )
+
+# Print results with sample sizes
+cat(sprintf("\nChanges in Caregiving Responsibilities (N=%d):\n", caregiving_changes$total_matched))
+print(caregiving_changes)
+
+cat(sprintf("\nChildcare Enrollment Changes (N=%d):\n", childcare_changes$total_caregivers))
+print(childcare_changes)
+
+cat(sprintf("\nImprovements in Childcare Situation (N=%d):\n", childcare_improvements$total_improvements))
+print(childcare_improvements)
+
+cat(sprintf("\nChallenges in Childcare Situation (N=%d):\n", childcare_challenges$total_challenges))
+print(childcare_challenges)
+
+cat(sprintf("\nBaseline Childcare Challenge Themes (N=%d):\n", baseline_challenges$total_responses))
+print(baseline_challenges)
+
+cat("\nRepresentative Quotes:\n")
+print(head(representative_quotes, 10))
+
+cat(sprintf("\nImpact of Rising Costs on Childcare (N=%d):\n", sum(cost_impact$count)))
+print(cost_impact)
+```
+## Health {.tabset}
+
+```{r health}
+# Create matched datasets
+baseline_matched <- baseline_df %>%
+  filter(ExternalReference %in% matched_ids)
+
+midline_matched <- midline_df %>%
+  filter(externalreference_m %in% matched_ids)
+
+# Calculate severity for baseline
+baseline_severity <- baseline_matched %>%
+  mutate(
+    Anxiety = case_when(
+      wb_anxious == "Nearly every day" | wb_worry == "Nearly every day" ~ "Severe",
+      wb_anxious == "More than half the days" | wb_worry == "More than half the days" ~ "Moderate",
+      wb_anxious == "Several days" | wb_worry == "Several days" ~ "Mild",
+      TRUE ~ "None"
+    ),
+    Depression = case_when(
+      wb_interest == "Nearly every day" | wb_down == "Nearly every day" ~ "Severe",
+      wb_interest == "More than half the days" | wb_down == "More than half the days" ~ "Moderate",
+      wb_interest == "Several days" | wb_down == "Several days" ~ "Mild",
+      TRUE ~ "None"
+    )
+  )
+
+# Calculate severity for midline
+midline_severity <- midline_matched %>%
+  mutate(
+    Anxiety = case_when(
+      wb_anxious_m == "Nearly every day" | wb_worry_m == "Nearly every day" ~ "Severe",
+      wb_anxious_m == "More than half the days" | wb_worry_m == "More than half the days" ~ "Moderate",
+      wb_anxious_m == "Several days" | wb_worry_m == "Several days" ~ "Mild",
+      TRUE ~ "None"
+    ),
+    Depression = case_when(
+      wb_interest_m == "Nearly every day" | wb_down_m == "Nearly every day" ~ "Severe",
+      wb_interest_m == "More than half the days" | wb_down_m == "More than half the days" ~ "Moderate",
+      wb_interest_m == "Several days" | wb_down_m == "Several days" ~ "Mild",
+      TRUE ~ "None"
+    )
+  )
+
+# Calculate counts and percentages for baseline
+baseline_counts <- baseline_severity %>%
+  summarise(
+    Anxiety_None = round(mean(Anxiety == "None") * 100, 0),
+    Anxiety_Mild = round(mean(Anxiety == "Mild") * 100, 0),
+    Anxiety_Moderate = round(mean(Anxiety == "Moderate") * 100, 0),
+    Anxiety_Severe = round(mean(Anxiety == "Severe") * 100, 0),
+    Depression_None = round(mean(Depression == "None") * 100, 0),
+    Depression_Mild = round(mean(Depression == "Mild") * 100, 0),
+    Depression_Moderate = round(mean(Depression == "Moderate") * 100, 0),
+    Depression_Severe = round(mean(Depression == "Severe") * 100, 0)
+  )
+
+# Calculate counts and percentages for midline
+midline_counts <- midline_severity %>%
+  summarise(
+    Anxiety_None = round(mean(Anxiety == "None") * 100, 0),
+    Anxiety_Mild = round(mean(Anxiety == "Mild") * 100, 0),
+    Anxiety_Moderate = round(mean(Anxiety == "Moderate") * 100, 0),
+    Anxiety_Severe = round(mean(Anxiety == "Severe") * 100, 0),
+    Depression_None = round(mean(Depression == "None") * 100, 0),
+    Depression_Mild = round(mean(Depression == "Mild") * 100, 0),
+    Depression_Moderate = round(mean(Depression == "Moderate") * 100, 0),
+    Depression_Severe = round(mean(Depression == "Severe") * 100, 0)
+  )
+
+
+# Calculate differences in percentages (Midline - Baseline)
+differences <- data.frame(
+  Condition = rep(c("Anxiety", "Depression"), each = 4),
+  Severity = rep(c("None", "Mild", "Moderate", "Severe"), 2),
+  Change = c(
+    midline_counts$Anxiety_None - baseline_counts$Anxiety_None,
+    midline_counts$Anxiety_Mild - baseline_counts$Anxiety_Mild,
+    midline_counts$Anxiety_Moderate - baseline_counts$Anxiety_Moderate,
+    midline_counts$Anxiety_Severe - baseline_counts$Anxiety_Severe,
+    midline_counts$Depression_None - baseline_counts$Depression_None,
+    midline_counts$Depression_Mild - baseline_counts$Depression_Mild,
+    midline_counts$Depression_Moderate - baseline_counts$Depression_Moderate,
+    midline_counts$Depression_Severe - baseline_counts$Depression_Severe
+  )
+) %>%
+  mutate(
+    Change = round(Change, 0),  # Round the Change values
+    Severity = factor(Severity, levels = c("None", "Mild", "Moderate", "Severe")),
+    # Create label for each bar with rounded percentage without +/- signs
+    label = sprintf("%.0f%%", abs(Change))  # Remove +/- and round to whole numbers
+  )
+
+# Create the plot WITH PATCHWORK
+# Create separate plots for Anxiety and Depression
+anxiety_plot <- differences %>%
+  filter(Condition == "Anxiety") %>%
+  ggplot(aes(x = Severity, y = Change, fill = Change > 0)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, 
+                y = ifelse(Change > 0, Change + 0.5, Change - 0.5)),
+            size = 6,
+            family = "Arial",
+            fontface = "bold") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = c("TRUE" = "#46214A", "FALSE" = "#D70073")) +
+  labs(
+    title = "Changes in Anxiety Severity",
+    x = "Severity Level",
+    y = "Change in Percentage Points"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    panel.grid = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 16, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 16, family = "Arial", face = "bold"),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold")
+  )
+
+depression_plot <- differences %>%
+  filter(Condition == "Depression") %>%
+  ggplot(aes(x = Severity, y = Change, fill = Change > 0)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, 
+                y = ifelse(Change > 0, Change + 0.5, Change - 0.5)),
+            size = 6,
+            family = "Arial",
+            fontface = "bold") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = c("TRUE" = "#46214A", "FALSE" = "#D70073")) +
+  labs(
+    title = "Changes in Depression Severity",
+    x = "Severity Level",
+    y = "Change in Percentage Points"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    panel.grid = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 16, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 16, family = "Arial", face = "bold"),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold")
+  )
+
+# Combine plots using patchwork
+library(patchwork)
+combined_plot <- anxiety_plot + depression_plot +
+  plot_annotation(
+    title = "Changes in Mental Health Severity Levels between Surveys",
+    subtitle = sprintf("Sample size: N=%d", nrow(baseline_matched)),
+    theme = theme(
+      plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+      plot.subtitle = element_text(size = 12, family = "Arial", face = "bold")
+    )
+  )
+
+# Save the combined plot
+ggsave("mental_health_changes.png", 
+       plot = combined_plot,
+       width = 10, 
+       height = 6, 
+       dpi = 400)
+# Print numerical changes
+cat(sprintf("\nChanges in percentages by severity level (N=%d):\n", nrow(baseline_matched)))
+print(differences[order(differences$Condition, differences$Severity), ])
+
+# Create the cross-tabulation
+health_perception_changes <- baseline_matched %>%
+  select(ExternalReference, wb_health_perception) %>%
+  inner_join(
+    midline_matched %>%
+    select(externalreference_m, wb_health_status_m),
+    by = c("ExternalReference" = "externalreference_m")
+  ) %>%
+  group_by(wb_health_perception, wb_health_status_m) %>%
+  summarise(
+    count = n(),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    percentage = round(count / sum(count) * 100, 0)  # Changed to round to 0 decimal places
+  ) %>%
+  arrange(wb_health_perception, wb_health_status_m)
+
+cat(sprintf("\nHealth Perception Changes (N=%d):\n", sum(health_perception_changes$count)))
+print(health_perception_changes, n = Inf)
+
+##Plot without Patchwork
+mental_health_plot1 <- ggplot(differences, aes(x = Severity, y = Change, fill = Change > 0)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, 
+                y = ifelse(Change > 0, Change + 0.5, Change - 0.5)),
+            size = 6,  # Increased from 3.5
+            family = "Arial",
+            fontface = "bold") +
+  facet_wrap(~Condition) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = c("TRUE" = "#46214A", "FALSE" = "#D70073")) +
+  labs(
+    title = "Changes in Mental Health Severity Levels between Surveys",
+    subtitle = sprintf("Sample size: N=%d", nrow(baseline_matched)),
+    x = "Severity Level",
+    y = "Change in Percentage Points"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    panel.grid = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 16, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 16, family = "Arial", face = "bold"),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold"),
+    strip.text = element_text(size = 16, family = "Arial", face = "bold")  # Facet labels
+  )
+
+# Save the plot
+ggsave("mental_health_changes1.png", 
+       plot = mental_health_plot1,
+       width = 10, 
+       height = 6, 
+       dpi = 400)
+```
+
+## Community and Social Support {.tabset}
+
+```{r}
+# Analyze key changes in community engagement
+community_changes <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  summarise(
+    # Community participation
+    baseline_no_participation = sum(grepl("have not participated", comm_part), na.rm = TRUE),
+    midline_no_participation = sum(grepl("have not participated", comm_part_m), na.rm = TRUE),
+    
+    # Relationship quality
+    baseline_strong = sum(grepl("strong and supportive", comm_relationships), na.rm = TRUE),
+    midline_strong = sum(grepl("strong and supportive", comm_relationships_m), na.rm = TRUE),
+    
+    # Support patterns
+    baseline_often_emotional = sum(comm_give_emo_supp == "Often", na.rm = TRUE),
+    midline_often_emotional = sum(comm_give_emo_supp_m == "Often", na.rm = TRUE),
+    
+    baseline_often_financial = sum(comm_give_money == "Often", na.rm = TRUE),
+    midline_often_financial = sum(comm_give_money_m == "Often", na.rm = TRUE)
+  )
+
+print("Changes in Community Engagement:")
+print(community_changes)
+
+# Analyze religious activity participation
+religious_activity <- data.frame(
+  timepoint = c("Baseline", "Midline"),
+  count = c(
+    sum(grepl("Religious Activities", baseline_matched$comm_part), na.rm = TRUE),
+    sum(grepl("Religious Activities", midline_df$comm_part_m), na.rm = TRUE)
+  )
+)
+
+print("\nReligious Activity Participation:")
+print(religious_activity)
+
+# Analyze community betterment activities
+community_betterment <- data.frame(
+  timepoint = c("Baseline", "Midline"),
+  count = c(
+    sum(grepl("Community Betterment", baseline_matched$comm_part), na.rm = TRUE),
+    sum(grepl("Community Betterment", midline_df$comm_part_m), na.rm = TRUE)
+  )
+)
+print("\nCommunity Betterment Participation:")
+print(community_betterment)
+```
+## Impact Analysis {.tabset}
+```{r impact}
+#impact funds use
+table(midline_df$impact_fund_receive_m)
+
+impact_fund <- midline_df %>%
+  filter(impact_fund_receive_m!="How are you using the funds you received from UpTogether? Select all that apply - Selected Choice") %>%
+  mutate(impact_fund_receive_m_clean = gsub("\\s*\\(.*?\\)", "", (impact_fund$impact_fund_receive_m))) %>%
+  mutate(basic_need = case_when(
+    is.na(impact_fund_receive_m_clean) ~ NA_character_,
+    stringr::str_detect(impact_fund_receive_m_clean,"Daily living needs") ~"Yes",
+    stringr::str_detect(impact_fund_receive_m_clean,"Family caregiving") ~"Yes",
+    stringr::str_detect(impact_fund_receive_m_clean,"Housing expenses") ~"Yes",
+    TRUE ~"No"))
+
+table(impact_fund$basic_need)
+
+impact_fund_count <- impact_fund %>%
+  separate_rows(impact_fund_receive_m_clean, sep=",") %>%
+  count(impact_fund_receive_m_clean) %>% 
+  mutate(percentage = n/sum(!is.na(midline_df$impact_fund_receive_m)))
+
+#plot
+ggplot(impact_fund_count, aes(x = reorder(impact_fund_receive_m_clean, n), y = percentage)) +
+  geom_bar(stat = "identity", fill = "#46214A") +   coord_flip() +
+  theme(
+    panel.grid.major=element_blank(), 
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.text.y = element_text(size=14, family = "Arial"),
+    axis.text.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.title.x = element_text(size=14, family = "Arial"),
+    plot.title = element_text(size=14, family = "Arial"),
+    axis.ticks.y = element_blank()) +
+  labs(
+    title = "Use of Cash Investment",
+    y = "Percentage of Fund Members",
+    x = NULL) +
+  geom_text(aes(label = sprintf("%.0f%%", percentage * 100)), hjust=1, color="white")
+
+# Define categorization function for open-text responses first
+categorize_impact <- function(text) {
+  categories <- list(
+    "Basic Needs" = c("food", "comida", "alimentos", "basic", "necesidad"),
+    "Housing & Bills" = c("rent", "housing", "bills", "utilities", "vivienda", "casa", "pago"),
+    "Healthcare" = c("medical", "health", "doctor", "medicine", "salud", "medicamentos"),
+    "Children & Education" = c("school", "education", "children", "kids", "child", "escuela", "niños"),
+    "Transportation" = c("car", "transport", "gas", "vehicle", "carro", "transporte"),
+    "Family Support" = c("family", "familia", "parents", "relatives", "hijo", "hija"),
+    "Debt & Savings" = c("debt", "save", "saving", "loan", "credit", "deuda", "ahorros"),
+    "Emotional Wellbeing" = c("stress", "peace", "relief", "help", "support", "ayuda", "tranquil")
+  )
+  
+  text <- tolower(text)
+  matched_categories <- sapply(categories, function(keywords) {
+    any(sapply(keywords, function(k) grepl(k, text)))
+  })
+  
+  return(names(matched_categories)[matched_categories])
+}
+
+# 1. Family Support Analysis
+fam_support_table <- midline_df %>%
+  filter(!is.na(ripple_fam_select_m)) %>%
+  count(ripple_fam_select_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+# 2. Community Support Analysis
+comm_support_table <- midline_df %>%
+  filter(!is.na(ripple_comm_select_m)) %>%
+  count(ripple_comm_select_m) %>%
+  mutate(
+    percentage = round(n/sum(n) * 100, 0)
+  )
+
+# 3. Cash Investment Usage Analysis - note that this incorrectly applies the categorziation function to impact_fund_receive (which is a categorical variable)
+cash_investment_analysis <- midline_df %>%
+  #changed to impact_fund_specific to get a categorization of the open-text response instead of categorical one 
+  filter(!is.na(impact_fund_specific_m)) %>%
+  mutate(
+    categories = sapply(impact_fund_specific_m, function(x) 
+      paste(categorize_impact(x), collapse = "; "))
+  )
+
+cash_categories <- unlist(strsplit(cash_investment_analysis$categories, "; "))
+cash_summary <- data.frame(
+  table(cash_categories)) %>%
+  mutate(
+    percentage = round(Freq/nrow(cash_investment_analysis) * 100, 0)
+  ) %>%
+  arrange(desc(Freq)) %>%
+  rename(
+    Category = cash_categories,
+    Count = Freq
+  )
+table(midline_df$impact_fund_specific_m)
+
+# 4. Family Impact Analysis
+midline_df$impact_ripple_fam_m
+
+family_impact <- midline_df %>%
+  filter(!is.na(impact_ripple_fam_m)) %>%
+  mutate(
+    categories = sapply(impact_ripple_fam_m, function(x) 
+      paste(categorize_impact(x), collapse = "; "))
+  )
+
+family_categories <- unlist(strsplit(family_impact$categories, "; "))
+family_cat_summary <- data.frame(
+  table(family_categories)) %>%
+  mutate(
+    percentage = round(Freq/nrow(family_impact) * 100, 0)
+  ) %>%
+  arrange(desc(Freq))
+
+# 5. Community Impact Analysis
+midline_df$impact_ripple_comm_m
+
+community_impact <- midline_df %>%
+  filter(!is.na(impact_ripple_comm_m)) %>%
+  mutate(
+    categories = sapply(impact_ripple_comm_m, function(x) 
+      paste(categorize_impact(x), collapse = "; "))
+  )
+
+comm_categories <- unlist(strsplit(community_impact$categories, "; "))
+comm_cat_summary <- data.frame(
+  table(comm_categories)) %>%
+  mutate(
+    percentage = round(Freq/nrow(community_impact) * 100, 0)
+  ) %>%
+  arrange(desc(Freq))
+
+# Create visualization
+ggplot(cash_summary, 
+       aes(x = reorder(Category, -percentage), 
+           y = percentage, 
+           fill = Category)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  scale_fill_manual(values = c(
+    "Basic Needs" = "#46214A",
+    "Housing & Bills" = "#46214A",
+    "Healthcare" = "#46214A",
+    "Children & Education" = "#46214A",
+    "Transportation" = "#46214A",
+    "Family Support" = "#46214A",
+    "Debt & Savings" = "#46214A",
+    "Emotional Wellbeing" = "#46214A"
+  )) +
+  geom_text(aes(label = sprintf("%d%%", percentage)),
+            position = position_stack(vjust = 0.5),
+            color = "white",
+            size = 6,
+            family = "Arial",
+            fontface = "bold") +
+  labs(
+    title = "Cash Investment Usage by Category",
+    subtitle = sprintf("How participants utilized their guaranteed income (N=%d)", 
+                      nrow(cash_investment_analysis)),
+    x = "",
+    y = "Percentage of Respondents"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 16, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 16, family = "Arial", face = "bold"),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold"),
+    legend.position = "none"
+  )
+
+# Save the plot
+ggsave("cash_investment_usage.png", 
+       width = 10, 
+       height = 6, 
+       dpi = 400)
+
+# Print results with sample sizes
+cat(sprintf("\nFamily Support Analysis (N=%d):\n", sum(!is.na(midline_df$ripple_fam_select_m))))
+print(knitr::kable(fam_support_table,
+      col.names = c("Response", "Count", "Percentage (%)"),
+      format = "simple"))
+
+cat(sprintf("\nCommunity Support Analysis (N=%d):\n", sum(!is.na(midline_df$ripple_comm_select_m))))
+print(knitr::kable(comm_support_table,
+      col.names = c("Response", "Count", "Percentage (%)"),
+      format = "simple"))
+
+cat(sprintf("\nFamily Impact Analysis (N=%d):\n", nrow(family_impact)))
+print(knitr::kable(family_cat_summary,
+      col.names = c("Impact Category", "Count", "Percentage (%)"),
+      format = "simple"))
+
+cat(sprintf("\nCommunity Impact Analysis (N=%d):\n", nrow(community_impact)))
+print(knitr::kable(comm_cat_summary,
+      col.names = c("Impact Category", "Count", "Percentage (%)"),
+      format = "simple"))
+```
+## Goals {.tabset}
+
+- Housing Goals and Achievements
+
+- **Moving Goals Overview:**
+ - Total participants with moving goals: 8 (11% of study group)
+ - Six-month outcomes:
+   - Successful moves: 2 participants (25%)
+   - Still working towards goal: 6 participants (75%)
+ 
+- Education Pursuits
+
+- **Education Goals Overview:**
+ - Participants with education goals: 7 (10% of respondents)
+ - Midline outcomes:
+   - Successfully enrolled: 1 participant (14.3%)
+   - In progress: 6 participants (85.7%)
+   
+- **Implementation Context:**
+ - Progress influenced by:
+   - Academic calendar constraints
+   - Required preparation time
+   - Program admission cycles
+
+- Childcare Challenges
+
+- **Baseline Situation:**
+ - Participants reporting childcare difficulties: 39 (53% of respondents)
+
+- **Six-Month Progress:**
+ - Improved situations: 8 participants (20.5%)
+ - Ongoing challenges: 31 participants (79.5%)
+```{r goals}
+goal_achievements <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  mutate(
+    # Housing Goals Analysis
+    wanted_to_move = case_when(
+      grepl("Planning on moving", goals_house) ~ "Yes",
+      !is.na(goals_house) ~ "No",
+      TRUE ~ "Not Specified"
+    ),
+    housing_outcome = case_when(
+      wanted_to_move == "Yes" & grepl("Owned", house_status_m) ~ "Achieved: Owned Home",
+      wanted_to_move == "Yes" & grepl("Rented", house_status_m) ~ "Achieved: New Rental",
+      wanted_to_move == "Yes" ~ "Not Yet Achieved",
+      TRUE ~ NA_character_
+    ),
+    
+    # Education Goals Analysis
+    wanted_education = case_when(
+      goals_ed == "Yes" ~ "Yes",
+      goals_ed == "No" ~ "No",
+      TRUE ~ "Not Specified"
+    ),
+    education_outcome = case_when(
+      wanted_education == "Yes" & goal_education_m == "Yes" ~ "Achieved: Enrolled",
+      wanted_education == "Yes" & goals_ed_progress_m == "Yes" ~ "Achieved: Making Progress",
+      wanted_education == "Yes" ~ "Not Yet Achieved",
+      TRUE ~ NA_character_
+    ),
+    
+    # Childcare Analysis
+    had_childcare_challenge = case_when(
+      !is.na(child_care_challenge) & 
+      child_care_challenge != "No" & 
+      child_care_challenge != "None" ~ "Had Challenges",
+      TRUE ~ "No Challenges/Not Specified"
+    ),
+    childcare_outcome = case_when(
+      had_childcare_challenge == "Had Challenges" & 
+      !is.na(childcare_better_m) & 
+      childcare_better_m != "" ~ "Challenge Improved",
+      had_childcare_challenge == "Had Challenges" ~ "Still Challenging",
+      TRUE ~ NA_character_
+    )
+  )
+
+# Housing Achievement Summary (of those who wanted to move)
+housing_achievement_summary <- goal_achievements %>%
+  filter(wanted_to_move == "Yes") %>%
+  summarise(
+    total_wanted_to_move = n(),
+    achieved_rental = sum(housing_outcome == "Achieved: New Rental", na.rm = TRUE),
+    achieved_owned = sum(housing_outcome == "Achieved: Owned Home", na.rm = TRUE),
+    not_achieved = sum(housing_outcome == "Not Yet Achieved", na.rm = TRUE)
+  ) %>%
+  mutate(
+    pct_rental = round(achieved_rental/total_wanted_to_move * 100, 0),
+    pct_owned = round(achieved_owned/total_wanted_to_move * 100, 0),
+    pct_not_achieved = round(not_achieved/total_wanted_to_move * 100, 0)
+  )
+
+# Education Achievement Summary (of those who wanted education)
+education_achievement_summary <- goal_achievements %>%
+  filter(wanted_education == "Yes") %>%
+  summarise(
+    total_wanted_education = n(),
+    enrolled = sum(education_outcome == "Achieved: Enrolled", na.rm = TRUE),
+    making_progress = sum(education_outcome == "Achieved: Making Progress", na.rm = TRUE),
+    not_achieved = sum(education_outcome == "Not Yet Achieved", na.rm = TRUE)
+  ) %>%
+  mutate(
+    pct_enrolled = round(enrolled/total_wanted_education * 100, 0),
+    pct_progress = round(making_progress/total_wanted_education * 100, 0),
+    pct_not_achieved = round(not_achieved/total_wanted_education * 100, 0)
+  )
+
+# Childcare Improvement Summary (of those who had challenges)
+childcare_improvement <- goal_achievements %>%
+  filter(had_childcare_challenge == "Had Challenges") %>%
+  summarise(
+    total_had_challenges = n(),
+    improved = sum(childcare_outcome == "Challenge Improved", na.rm = TRUE),
+    still_challenging = sum(childcare_outcome == "Still Challenging", na.rm = TRUE)
+  ) %>%
+  mutate(
+    pct_improved = round(improved/total_had_challenges * 100, 0),
+    pct_still_challenging = round(still_challenging/total_had_challenges * 100, 0)
+  )
+
+# Print results with sample sizes
+cat(sprintf("\nHOUSING GOAL ACHIEVEMENTS (N=%d):\n", housing_achievement_summary$total_wanted_to_move))
+print(housing_achievement_summary)
+
+cat(sprintf("\nEDUCATION GOAL ACHIEVEMENTS (N=%d):\n", education_achievement_summary$total_wanted_education))
+print(education_achievement_summary)
+
+cat(sprintf("\nCHILDCARE IMPROVEMENTS (N=%d):\n", childcare_improvement$total_had_challenges))
+print(childcare_improvement)
+
+# Additional context with sample size
+context_summary <- goal_achievements %>%
+  summarise(
+    total_respondents = n(),
+    wanted_to_move = sum(wanted_to_move == "Yes", na.rm = TRUE),
+    wanted_education = sum(wanted_education == "Yes", na.rm = TRUE),
+    had_childcare_challenges = sum(had_childcare_challenge == "Had Challenges", na.rm = TRUE)
+  )
+
+cat(sprintf("\nCONTEXT - TOTAL NUMBERS (N=%d):\n", context_summary$total_respondents))
+print(context_summary)
+```
+
+### Goals Big Picture {.tabset}
+```{r goals-2}
+# Create clean goal categories for baseline and midline
+goal_transitions <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  mutate(
+    # Clean baseline goals
+    baseline_goal = case_when(
+      grepl("housing", goals_select, ignore.case = TRUE) ~ "Housing",
+      grepl("employment", goals_select, ignore.case = TRUE) ~ "Employment",
+      grepl("education", goals_select, ignore.case = TRUE) ~ "Education",
+      grepl("debt", goals_select, ignore.case = TRUE) ~ "Debt Management",
+      grepl("saving", goals_select, ignore.case = TRUE) ~ "Savings",
+      grepl("transportation", goals_select, ignore.case = TRUE) ~ "Transportation",
+      TRUE ~ "Other/Not Specified"
+    ),
+    # Clean midline goals
+    midline_goal = case_when(
+      grepl("housing", goal_priority_m, ignore.case = TRUE) ~ "Housing",
+      grepl("employment", goal_priority_m, ignore.case = TRUE) ~ "Employment",
+      grepl("education", goal_priority_m, ignore.case = TRUE) ~ "Education",
+      grepl("debt", goal_priority_m, ignore.case = TRUE) ~ "Debt Management",
+      grepl("saving", goal_priority_m, ignore.case = TRUE) ~ "Savings",
+      grepl("transportation", goal_priority_m, ignore.case = TRUE) ~ "Transportation",
+      TRUE ~ "Other/Not Specified"
+    )
+  )
+
+# Create transition table
+goal_transition_table <- goal_transitions %>%
+  group_by(baseline_goal, midline_goal) %>%
+  summarise(
+    number_of_respondents = n(),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    percentage = round(number_of_respondents/sum(number_of_respondents) * 100, 0)
+  ) %>%
+  arrange(desc(number_of_respondents))
+
+# Print with sample size
+cat(sprintf("\nMost Common Goal Transitions (N=%d):\n", sum(goal_transition_table$number_of_respondents)))
+print(goal_transition_table)
+
+# Goal summary with sample sizes
+goal_summary <- goal_transitions %>%
+  summarise(
+    total_respondents = n(),
+    baseline_housing = sum(baseline_goal == "Housing"),
+    midline_housing = sum(midline_goal == "Housing"),
+    baseline_employment = sum(baseline_goal == "Employment"),
+    midline_employment = sum(midline_goal == "Employment"),
+    baseline_education = sum(baseline_goal == "Education"),
+    midline_education = sum(midline_goal == "Education"),
+    baseline_debt = sum(baseline_goal == "Debt Management"),
+    midline_debt = sum(midline_goal == "Debt Management"),
+    baseline_savings = sum(baseline_goal == "Savings"),
+    midline_savings = sum(midline_goal == "Savings"),
+    baseline_transport = sum(baseline_goal == "Transportation"),
+    midline_transport = sum(midline_goal == "Transportation")
+  )
+
+cat(sprintf("\nOverall Goal Changes (N=%d):\n", goal_summary$total_respondents))
+print(goal_summary)
+
+# Goal progression analysis
+goal_progression <- goal_transitions %>%
+  group_by(baseline_goal) %>%
+  summarise(
+    total_at_baseline = n(),
+    kept_same_goal = sum(baseline_goal == midline_goal),
+    shifted_to_new_goal = sum(baseline_goal != midline_goal),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    pct_kept_goal = round(kept_same_goal/total_at_baseline * 100, 0),
+    pct_new_goal = round(shifted_to_new_goal/total_at_baseline * 100, 0)
+  )
+
+cat(sprintf("\nGoal Progression Analysis (N=%d):\n", sum(goal_progression$total_at_baseline)))
+print(goal_progression)
+```
+
+### Goals, where did they shift? {.tabset}
+```{r goals-3}
+# Detailed analysis of where people's goals shifted
+goal_transitions <- baseline_matched %>%
+  left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+  mutate(
+    # Clean baseline goals
+    baseline_goal = case_when(
+      grepl("housing", goals_select, ignore.case = TRUE) ~ "Housing",
+      grepl("employment", goals_select, ignore.case = TRUE) ~ "Employment",
+      grepl("education", goals_select, ignore.case = TRUE) ~ "Education",
+      grepl("debt", goals_select, ignore.case = TRUE) ~ "Debt Management",
+      grepl("saving", goals_select, ignore.case = TRUE) ~ "Savings",
+      grepl("transportation", goals_select, ignore.case = TRUE) ~ "Transportation",
+      TRUE ~ "Other/Not Specified"
+    ),
+    # Clean midline goals
+    midline_goal = case_when(
+      grepl("housing", goal_priority_m, ignore.case = TRUE) ~ "Housing",
+      grepl("employment", goal_priority_m, ignore.case = TRUE) ~ "Employment",
+      grepl("education", goal_priority_m, ignore.case = TRUE) ~ "Education",
+      grepl("debt", goal_priority_m, ignore.case = TRUE) ~ "Debt Management",
+      grepl("saving", goal_priority_m, ignore.case = TRUE) ~ "Savings",
+      grepl("transportation", goal_priority_m, ignore.case = TRUE) ~ "Transportation",
+      TRUE ~ "Other/Not Specified"
+    )
+  )
+
+# Analysis for those who started with Housing goals
+housing_transitions <- goal_transitions %>%
+  filter(baseline_goal == "Housing") %>%
+  group_by(midline_goal) %>%
+  summarise(
+    count = n(),
+    percentage = round(count/n()*100, 0)
+  ) %>%
+  arrange(desc(count))
+
+# Analysis for those who started with Education goals
+education_transitions <- goal_transitions %>%
+  filter(baseline_goal == "Education") %>%
+  group_by(midline_goal) %>%
+  summarise(
+    count = n(),
+    percentage = round(count/n()*100, 0)
+  ) %>%
+  arrange(desc(count))
+
+# Analysis for those who started with Employment goals
+employment_transitions <- goal_transitions %>%
+  filter(baseline_goal == "Employment") %>%
+  group_by(midline_goal) %>%
+  summarise(
+    count = n(),
+    percentage = round(count/n()*100, 0)
+  ) %>%
+  arrange(desc(count))
+
+# Analysis of where new Housing goals came from
+new_housing_goals <- goal_transitions %>%
+  filter(midline_goal == "Housing" & baseline_goal != "Housing") %>%
+  group_by(baseline_goal) %>%
+  summarise(
+    count = n(),
+    percentage = round(count/n()*100, 0)
+  ) %>%
+  arrange(desc(count))
+
+# Analysis of financial circumstances and goal shifts
+financial_context <- goal_transitions %>%
+  group_by(baseline_goal) %>%
+  summarise(
+    total = n(),
+    improved_finances = sum(grepl("Not at all difficult|A little difficult", fin_expense_difficulty_m), na.rm = TRUE),
+    pct_improved = round(improved_finances/total * 100, 0)
+  ) %>%
+  arrange(desc(pct_improved))
+
+# Print results with sample sizes
+total_housing <- sum(housing_transitions$count)
+cat(sprintf("\nWhere did Housing Goals shift to? (N=%d):\n", total_housing))
+print(housing_transitions)
+
+total_education <- sum(education_transitions$count)
+cat(sprintf("\nWhere did Education Goals shift to? (N=%d):\n", total_education))
+print(education_transitions)
+
+total_employment <- sum(employment_transitions$count)
+cat(sprintf("\nWhere did Employment Goals shift to? (N=%d):\n", total_employment))
+print(employment_transitions)
+
+total_new_housing <- sum(new_housing_goals$count)
+cat(sprintf("\nWho added Housing as a new goal? (N=%d):\n", total_new_housing))
+print(new_housing_goals)
+
+total_financial <- sum(financial_context$total)
+cat(sprintf("\nFinancial Improvements by Initial Goal (N=%d):\n", total_financial))
+print(financial_context)
+```
+
+```{r employment-goals}
+# Employment Goals Progress Analysis with refined categorization
+employment_goals_progress <- baseline_matched %>%
+ left_join(midline_df, by = c("ExternalReference" = "externalreference_m")) %>%
+ mutate(
+   # More precise baseline employment goals categorization
+   baseline_emp_goal = case_when(
+     grepl("increase my income|better job security", goals_job_new, ignore.case = TRUE) ~ "Income/Security",
+     grepl("work-life balance|flexibility|closer to home", goals_job_new, ignore.case = TRUE) ~ "Work-Life Balance",
+     !is.na(goals_job_increase) ~ "Increase Hours", 
+     TRUE ~ "Other/None"
+   ),
+   
+   # Employment status changes
+   employment_change = case_when(
+     work == "No" & emp_status_m == "Yes" ~ "Gained Employment",
+     work == "Yes" & emp_status_m == "No" ~ "Lost Employment", 
+     work == emp_status_m ~ "No Change",
+     TRUE ~ "Unknown"
+   ),
+   
+   # Work hours changes
+   hours_outcome = case_when(
+     emp_hours_change_m == "My work hours have DECREASED" ~ "Decreased",
+     emp_hours_change_m == "My work hours have INCREASED" ~ "Increased",
+     emp_hours_change_m == "My work hours have stayed the same" ~ "Same",
+     TRUE ~ "Unknown"
+   )
+ )
+
+# Analysis for income/security seekers with detail
+income_security_outcomes <- employment_goals_progress %>%
+ filter(baseline_emp_goal == "Income/Security") %>%
+ summarise(
+   total_members = n(),
+   found_new_job = sum(work_new_m == "Yes", na.rm = TRUE),
+   gained_employment = sum(employment_change == "Gained Employment", na.rm = TRUE),
+   increased_hours = sum(hours_outcome == "Increased", na.rm = TRUE),
+   pct_new_job = round(found_new_job/total_members * 100, 0),
+   pct_gained_emp = round(gained_employment/total_members * 100, 0),
+   pct_increased_hours = round(increased_hours/total_members * 100, 0)
+ )
+
+# Analysis for work-life balance seekers with detail
+balance_outcomes <- employment_goals_progress %>%
+ filter(baseline_emp_goal == "Work-Life Balance") %>%
+ summarise(
+   total_members = n(),
+   reduced_hours = sum(hours_outcome == "Decreased", na.rm = TRUE),
+   found_new_job = sum(work_new_m == "Yes", na.rm = TRUE),
+   left_employment = sum(employment_change == "Lost Employment", na.rm = TRUE),
+   decreased_hours = sum(hours_outcome == "Decreased", na.rm = TRUE),
+   pct_reduced = round(reduced_hours/total_members * 100, 0),
+   pct_new_job = round(found_new_job/total_members * 100, 0),
+   pct_left = round(left_employment/total_members * 100, 0),
+   pct_decreased_hours = round(decreased_hours/total_members * 100, 0)
+ )
+
+# Analysis for those wanting to increase hours with detail
+hours_increase_outcomes <- employment_goals_progress %>%
+ filter(baseline_emp_goal == "Increase Hours") %>%
+ summarise(
+   total_members = n(),
+   actually_reduced = sum(hours_outcome == "Decreased", na.rm = TRUE),
+   actually_increased = sum(hours_outcome == "Increased", na.rm = TRUE),
+   maintained = sum(hours_outcome == "Same", na.rm = TRUE),
+   found_new_job = sum(work_new_m == "Yes", na.rm = TRUE),
+   pct_reduced = round(actually_reduced/total_members * 100, 0),
+   pct_increased = round(actually_increased/total_members * 100, 0),
+   pct_maintained = round(maintained/total_members * 100, 0),
+   pct_new_job = round(found_new_job/total_members * 100, 0)
+ )
+
+# First print initial counts to verify our categorization
+cat("\nInitial Categorization Counts:")
+print(table(employment_goals_progress$baseline_emp_goal))
+
+# Print detailed results
+cat("\nOutcomes for Members Seeking Better Income/Security (N=", 
+   income_security_outcomes$total_members, "):\n", sep="")
+print(income_security_outcomes)
+
+cat("\nOutcomes for Members Seeking Work-Life Balance (N=", 
+   balance_outcomes$total_members, "):\n", sep="")
+print(balance_outcomes)
+
+cat("\nOutcomes for Members Wanting to Increase Hours (N=", 
+   hours_increase_outcomes$total_members, "):\n", sep="")
+print(hours_increase_outcomes)
+```
+
+
+```{r, educational-goals}
+library(tidyverse)
+
+# Function to clean and display non-NA quotes
+display_quotes <- function(data, column_name, description) {
+  quotes <- data %>%
+    select(all_of(column_name)) %>%
+    filter(!is.na(get(column_name)), 
+           get(column_name) != "",
+           get(column_name) != "NA",
+           get(column_name) != "No",
+           get(column_name) != "None") %>%
+    pull(column_name)
+  
+  print(paste("\n", description, ":", sep=""))
+  print(quotes)
+  return(quotes)
+}
+
+# Get quotes for each category
+positive_quotes <- midline_df %>%
+  select(goals_ed_yes_m, goals_ed_yes_9_text_m, goals_ed_progress_m) %>%
+  filter(!is.na(goals_ed_yes_m) | !is.na(goals_ed_yes_9_text_m) | !is.na(goals_ed_progress_m))
+
+barrier_quotes <- midline_df %>%
+  select(goals_ed_no_future_9_text_m, goals_ed_no_progress_m) %>%
+  filter(!is.na(goals_ed_no_future_9_text_m) | !is.na(goals_ed_no_progress_m))
+
+# Display quotes for each category
+print("POSITIVE EXPERIENCES AND PROGRESS:")
+display_quotes(midline_df, "goals_ed_yes_9_text_m", "Educational Goals and Progress")
+display_quotes(midline_df, "goals_ed_progress_m", "Progress Made")
+
+print("\nBARRIERS AND CHALLENGES:")
+display_quotes(midline_df, "goals_ed_no_future_9_text_m", "Future Educational Barriers")
+display_quotes(midline_df, "goals_ed_no_progress_m", "Progress Barriers")
+
+# Optional: Look for positive sentiment words
+positive_words <- c("help", "ayuda", "mejor", "better", "good", "great", "achieve", "lograr", 
+                   "progress", "progreso", "success", "éxito", "hope", "esperanza")
+
+# Optional: Look for barrier-related words
+barrier_words <- c("difficult", "difícil", "hard", "cost", "costo", "time", "tiempo", 
+                  "money", "dinero", "work", "trabajo", "children", "niños")
+
+
+
+
+```
+
+## Max-Diff {.tabset}
+
+```{r max-diff}
+# Extract the specific columns for max-diff analysis
+selected_midline <- midline_df %>%
+  select(matches("^least_most_income_[1-6]_[1-4]_m$"))
+
+# Define the mapping of current variable names to desired names
+# Based on the question sets provided
+name_mapping <- c(
+  # Set 1
+  "least_most_income_1_1_m" = "Housing costs",
+  "least_most_income_1_2_m" = "Insurance costs",
+  "least_most_income_1_3_m" = "Transportation/car expenses",
+  "least_most_income_1_4_m" = "Well-being & Leisure",
+  
+  # Set 2
+  "least_most_income_2_1_m" = "Education/career development",
+  "least_most_income_2_2_m" = "Credit card debt",
+  "least_most_income_2_3_m" = "Family/caregiving expenses",
+  "least_most_income_2_4_m" = "Groceries/food",
+  
+  # Set 3
+  "least_most_income_3_1_m" = "Housing costs",
+  "least_most_income_3_2_m" = "Education/career development",
+  "least_most_income_3_3_m" = "Savings/investments",
+  "least_most_income_3_4_m" = "Well-being & Leisure",
+  
+  # Set 4
+  "least_most_income_4_1_m" = "Insurance costs",
+  "least_most_income_4_2_m" = "Credit card debt",
+  "least_most_income_4_3_m" = "Family/caregiving expenses",
+  "least_most_income_4_4_m" = "Savings/investments",
+  
+  # Set 5
+  "least_most_income_5_1_m" = "Housing costs",
+  "least_most_income_5_2_m" = "Transportation/car expenses",
+  "least_most_income_5_3_m" = "Groceries/food",
+  "least_most_income_5_4_m" = "Well-being & Leisure",
+  
+  # Set 6
+  "least_most_income_6_1_m" = "Insurance costs",
+  "least_most_income_6_2_m" = "Education/career development",
+  "least_most_income_6_3_m" = "Credit card debt",
+  "least_most_income_6_4_m" = "Groceries/food"
+)
+
+# Add participant_id column
+selected_midline <- selected_midline %>%
+  mutate(participant_id = row_number())
+
+# Function to transform data to long format
+transform_to_long <- function(df, sets, categories_per_set) {
+  long_data <- data.frame(participant_id = integer(0), 
+                         set_id = integer(0), 
+                         category = character(0), 
+                         score = character(0))
+  
+  participant_ids <- df$participant_id
+  
+  for (set in 1:sets) {
+    for (category in 1:categories_per_set) {
+      col_name <- paste0("least_most_income_", set, "_", category, "_m")
+      if (col_name %in% names(df)) {
+        scores <- df[[col_name]]
+        long_data <- rbind(long_data, data.frame(
+          participant_id = participant_ids,
+          set_id = set,
+          category = col_name,
+          score = scores
+        ))
+      }
+    }
+  }
+  
+  # Remove rows with NA scores
+  long_data <- long_data[!is.na(long_data$score), ]
+  return(long_data)
+}
+
+# Apply the function to transform the data
+long_data <- transform_to_long(selected_midline, sets = 6, categories_per_set = 4)
+
+# Apply the mapping to the category column
+long_data <- long_data %>%
+  mutate(category = name_mapping[category])
+
+# Convert the responses to numeric scores
+long_data <- long_data %>%
+  mutate(score = case_when(
+    grepl("MOST", score, ignore.case = TRUE) ~ 1,
+    grepl("LEAST", score, ignore.case = TRUE) ~ -1,
+    TRUE ~ 0
+  ))
+
+# Calculate BWS scores
+bws_counts <- long_data %>%
+  group_by(category) %>%
+  summarize(
+    most_count = sum(score == 1, na.rm = TRUE),
+    least_count = sum(score == -1, na.rm = TRUE),
+    total_count = n(),
+    bws_score = sum(score, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Remove rows with NA categories
+bws_counts <- bws_counts %>%
+  filter(!is.na(category))
+
+# Calculate and add sample size
+total_responses <- nrow(selected_midline)
+
+# Create the visualization with improvements
+ggplot(bws_counts, aes(x = reorder(category, bws_score), y = bws_score)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  coord_flip() +
+  labs(
+    title = "Importance of Factors in Spending Decisions",
+    subtitle = sprintf("Sample size: N=%d", total_responses),
+    x = NULL,
+    y = "Least/Most Important Ranking"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    text = element_text(family = "Arial"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold"),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    axis.text.y = element_text(size = 16, family = "Arial", face = "bold"),
+    axis.text.x = element_text(size = 16, family = "Arial", face = "bold"),
+    axis.ticks.x = element_blank()
+  ) +
+  scale_y_continuous(
+    breaks = c(min(bws_counts$bws_score), 0, max(bws_counts$bws_score)),
+    labels = c("Least\nImportant", "Neutral", "Most\nImportant")
+  )
+
+# Save the plot
+ggsave("max_diff_midline.png", 
+       width = 10, 
+       height = 6, 
+       dpi = 400)
+
+# Print results with sample size
+cat(sprintf("\nBest-Worst Scaling Analysis (N=%d):\n", total_responses))
+print(bws_counts)
+```
+
+
+```{r max-diff comparison}
+#Baseline
+# Baseline BWS Analysis
+selected_baseline <- baseline_df %>%
+  select(matches("^least_most_income_[1-9]_[1-4]$"))
+
+# Define baseline name mapping similar to midline structure
+baseline_mapping <- c(
+  # Set 1
+  "least_most_income_1_1" = "Housing costs",
+  "least_most_income_1_2" = "Health/Medical costs",
+  "least_most_income_1_3" = "Transportation/car expenses",
+  "least_most_income_1_4" = "Recreation/Leisure",
+  
+  # Set 2
+  "least_most_income_2_1" = "Education/career development",
+  "least_most_income_2_2" = "Credit card debt",
+  "least_most_income_2_3" = "Family/caregiving expenses",
+  "least_most_income_2_4" = "Well-being & Leisure",
+  
+  # # Set 3
+  "least_most_income_3_1" = "Insurance costs",
+  "least_most_income_3_2" = "Groceries/food",
+  "least_most_income_3_3" = "Savings/investments",
+  "least_most_income_3_4" = "Recreation/Leisure",
+  
+  # Set 4
+  "least_most_income_4_1" = "Housing costs",
+  "least_most_income_4_2" = "Credit card debt",
+  "least_most_income_4_3" = "Transportation/car expenses",
+  "least_most_income_4_4" = "Education/career development",
+  
+  # Set 5
+  "least_most_income_5_1" = "Health/Medical costs",
+  "least_most_income_5_2" = "Family/caregiving expenses",
+  "least_most_income_5_3" = "Recreation/Leisure",
+  "least_most_income_5_4" = "Savings/investments",
+  
+  # Set 6
+  "least_most_income_6_1" = "Insurance costs",
+  "least_most_income_6_2" = "Groceries/food",
+  "least_most_income_6_3" = "Family/caregiving expenses",
+  "least_most_income_6_4" = "Personal Well-being",
+  
+  # Set 7
+  "least_most_income_7_1" = "Housing costs",
+  "least_most_income_7_2" = "Health/Medical costs",
+  "least_most_income_7_3" = "Education/career development",
+  "least_most_income_7_4" = "Savings/investments",
+  
+  # Set 8
+  "least_most_income_8_1" = "Transportation/car expenses",
+  "least_most_income_8_2" = "Credit card debt",
+  "least_most_income_8_3" = "Recreation/Leisure",
+  "least_most_income_8_4" = "Insurance costs",
+  
+  # Set 9
+  "least_most_income_9_1" = "Family/caregiving expenses",
+  "least_most_income_9_2" = "Groceries/food",
+  "least_most_income_9_3" = "Savings/investments",
+  "least_most_income_9_4" = "Personal Well-being"
+)
+  
+
+# Add participant_id column
+selected_baseline <- selected_baseline %>%
+  mutate(participant_id = row_number())
+transform_to_long_baseline <- function(df, sets, categories_per_set) {
+  long_data <- data.frame(participant_id = integer(0), 
+                         set_id = integer(0), 
+                         category = character(0), 
+                         score = character(0))
+  
+  participant_ids <- df$participant_id
+  
+  for (set in 1:sets) {
+    for (category in 1:categories_per_set) {
+      col_name <- paste0("least_most_income_", set, "_", category)  # Removed _m
+      if (col_name %in% names(df)) {
+        scores <- df[[col_name]]
+        long_data <- rbind(long_data, data.frame(
+          participant_id = participant_ids,
+          set_id = set,
+          category = col_name,
+          score = scores
+        ))
+      }
+    }
+  }
+  
+  # Remove rows with NA scores
+  long_data <- long_data[!is.na(long_data$score), ]
+  return(long_data)
+}
+
+# Transform baseline data to long format
+baseline_long <- transform_to_long_baseline(selected_baseline, sets = 9, categories_per_set = 4)
+
+
+# Apply mapping and calculate scores for baseline
+baseline_bws <- baseline_long %>%
+  mutate(
+    category = baseline_mapping[category],
+    score = case_when(
+      grepl("MOST", score, ignore.case = TRUE) ~ 1,
+      grepl("LEAST", score, ignore.case = TRUE) ~ -1,
+      TRUE ~ 0
+    )
+  ) %>%
+  group_by(category) %>%
+  summarize(
+    most_count = sum(score == 1, na.rm = TRUE),
+    least_count = sum(score == -1, na.rm = TRUE),
+    total_count = n(),
+    bws_score = sum(score, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(category))
+
+# Then run the comparison again
+comparison_df <- baseline_bws %>%
+  select(category, bws_score) %>%
+  rename(baseline_score = bws_score) %>%
+  full_join(
+    bws_counts %>% 
+    select(category, bws_score) %>%
+    rename(midline_score = bws_score),
+    by = "category"
+  ) %>%
+  mutate(
+    score_change = midline_score - baseline_score,
+    percent_change = round((score_change/abs(baseline_score))*100, 0)
+  ) %>%
+  arrange(desc(midline_score))
+
+print("BWS Score Comparison (Baseline to Midline):")
+print(comparison_df)
+```
+
+
+

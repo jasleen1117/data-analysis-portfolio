@@ -1,0 +1,147 @@
+---
+title: "Merge_b_m_e"
+author: "Jasleen"
+date: "2025-06-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load required libraries
+library(dplyr)
+library(readr)
+
+# Read the three CSV files
+baseline_raw <- read_csv("baseline_clean.csv")
+midline_raw <- read_csv("midline_clean.csv") 
+endline_raw <- read_csv("endline_clean.csv")
+
+cat("Original dataset dimensions:\n")
+cat("Baseline:", nrow(baseline_raw), "rows,", ncol(baseline_raw), "columns\n")
+cat("Midline:", nrow(midline_raw), "rows,", ncol(midline_raw), "columns\n") 
+cat("Endline:", nrow(endline_raw), "rows,", ncol(endline_raw), "columns\n\n")
+
+# Step 1: Remove first row from baseline (it's text/metadata)
+baseline <- baseline_raw[-1, ]
+cat("After removing first row, baseline has:", nrow(baseline), "rows\n\n")
+
+# Step 1a: Remove first row from midline (it's text/metadata)
+midline_raw <- midline_raw[-1, ]
+cat("After removing first row, baseline has:", nrow(midline_raw), "rows\n\n")
+
+# Step 2: Prepare baseline data
+# Rename ExternalReference to entity_uuid and add _b suffix to columns that don't already have _b, _m, or _e
+baseline_prep <- baseline %>%
+  rename(entity_uuid = ExternalReference) %>%
+  rename_with(~ ifelse(!grepl("_[bme]$", .x), paste0(.x, "_b"), .x), -entity_uuid)
+
+cat("Baseline prepared:\n")
+cat("- ID column: entity_uuid\n")
+cat("- Variables with _b suffix:", sum(grepl("_b$", names(baseline_prep))), "\n")
+cat("- Variables that already had suffixes:", sum(grepl("_[me]$", names(baseline_prep))), "\n")
+cat("- Total columns:", ncol(baseline_prep), "\n\n")
+
+# Step 3: Prepare midline data  
+# Rename externalreference_m to entity_uuid and add _m suffix only to columns that don't already have _m, _b, or _e
+midline_prep <- midline_raw %>%
+  rename(entity_uuid = externalreference_m) %>%
+  rename_with(~ ifelse(!grepl("_[bme]$", .x), paste0(.x, "_m"), .x), -entity_uuid)
+
+cat("Midline prepared:\n")
+cat("- ID column: entity_uuid\n") 
+cat("- Variables with _m suffix:", sum(grepl("_m$", names(midline_prep))), "\n")
+cat("- Variables that already had suffixes:", sum(grepl("_[be]$", names(midline_prep))), "\n")
+cat("- Total columns:", ncol(midline_prep), "\n\n")
+
+# Step 4: Prepare endline data
+# entity_uuid stays as is, add _e suffix only to columns that don't already have _e, _b, or _m
+endline_prep <- endline_raw %>%
+  rename_with(~ ifelse(!grepl("_[bme]$", .x), paste0(.x, "_e"), .x), -entity_uuid)
+
+cat("Endline prepared:\n")
+cat("- ID column: entity_uuid\n")
+cat("- Variables with _e suffix:", ncol(endline_prep) - 1, "\n") 
+cat("- Total columns:", ncol(endline_prep), "\n\n")
+
+# Step 5: Check unique entity_uuid counts in each dataset
+baseline_uuids <- unique(baseline_prep$entity_uuid[!is.na(baseline_prep$entity_uuid)])
+midline_uuids <- unique(midline_prep$entity_uuid[!is.na(midline_prep$entity_uuid)])
+endline_uuids <- unique(endline_prep$entity_uuid[!is.na(endline_prep$entity_uuid)])
+
+cat("Unique entity_uuid counts:\n")
+cat("Baseline:", length(baseline_uuids), "\n")
+cat("Midline:", length(midline_uuids), "\n") 
+cat("Endline:", length(endline_uuids), "\n")
+
+# Check overlaps
+all_uuids <- unique(c(baseline_uuids, midline_uuids, endline_uuids))
+overlap_bm <- intersect(baseline_uuids, midline_uuids)
+overlap_be <- intersect(baseline_uuids, endline_uuids)
+overlap_me <- intersect(midline_uuids, endline_uuids)
+overlap_all <- intersect(intersect(baseline_uuids, midline_uuids), endline_uuids)
+
+cat("\nOverlap analysis:\n")
+cat("Total unique entity_uuids across all datasets:", length(all_uuids), "\n")
+cat("Baseline & Midline overlap:", length(overlap_bm), "\n")
+cat("Baseline & Endline overlap:", length(overlap_be), "\n")
+cat("Midline & Endline overlap:", length(overlap_me), "\n")
+cat("All three datasets overlap:", length(overlap_all), "\n\n")
+
+# Step 6: Perform full outer join to merge all datasets
+merged_data <- baseline_prep %>%
+  full_join(midline_prep, by = "entity_uuid") %>%
+  full_join(endline_prep, by = "entity_uuid")
+
+cat("Merged dataset created:\n")
+cat("Total rows:", nrow(merged_data), "\n")
+cat("Total columns:", ncol(merged_data), "\n")
+cat("Expected columns: 1 + ", ncol(baseline_prep) - 1, " + ", ncol(midline_prep) - 1, " + ", ncol(endline_prep) - 1, " = ", 1 + (ncol(baseline_prep) - 1) + (ncol(midline_prep) - 1) + (ncol(endline_prep) - 1), "\n\n")
+
+# Step 7: Create a participation tracking variable
+merged_data <- merged_data %>%
+  mutate(
+    participated_baseline = !is.na(entity_uuid) & entity_uuid %in% baseline_uuids,
+    participated_midline = !is.na(entity_uuid) & entity_uuid %in% midline_uuids,
+    participated_endline = !is.na(entity_uuid) & entity_uuid %in% endline_uuids,
+    participation_pattern = case_when(
+      participated_baseline & participated_midline & participated_endline ~ "All_three",
+      participated_baseline & participated_midline & !participated_endline ~ "Baseline_Midline",
+      participated_baseline & !participated_midline & participated_endline ~ "Baseline_Endline", 
+      !participated_baseline & participated_midline & participated_endline ~ "Midline_Endline",
+      participated_baseline & !participated_midline & !participated_endline ~ "Baseline_only",
+      !participated_baseline & participated_midline & !participated_endline ~ "Midline_only",
+      !participated_baseline & !participated_midline & participated_endline ~ "Endline_only",
+      TRUE ~ "None"
+    )
+  )
+
+# Step 8: Summary of participation patterns
+cat("Participation patterns:\n")
+participation_summary <- table(merged_data$participation_pattern)
+print(participation_summary)
+cat("\n")
+
+# Step 9: Save the merged dataset
+write_csv(merged_data, "merged_b_m_e.csv")
+cat("Merged dataset saved as 'merged_b_m_e.csv'\n\n")
+
+# Step 10: Create summary statistics for verification
+cat("=== MERGE VERIFICATION ===\n")
+cat("Final dataset summary:\n")
+cat("- Rows:", nrow(merged_data), "\n")
+cat("- Columns:", ncol(merged_data), "\n")
+cat("- Baseline variables (ending in _b):", sum(grepl("_b$", names(merged_data))), "\n")
+cat("- Midline variables (ending in _m):", sum(grepl("_m$", names(merged_data))), "\n") 
+cat("- Endline variables (ending in _e):", sum(grepl("_e$", names(merged_data))), "\n")
+cat("- ID and tracking variables:", sum(!grepl("_[bme]$", names(merged_data))), "\n")
+
+# Show first few rows and columns for verification
+cat("\nFirst 5 rows of key variables:\n")
+key_vars <- c("entity_uuid", "participation_pattern", names(merged_data)[2:5], names(merged_data)[grepl("_m$", names(merged_data))][1:2], names(merged_data)[grepl("_e$", names(merged_data))][1:2])
+print(merged_data[1:5, key_vars[key_vars %in% names(merged_data)]])
+
+cat("\n=== MERGE COMPLETE ===\n")
+cat("Your merged dataset is ready for analysis!\n")
+cat("You can now create cross-sectional comparisons by filtering on participation_pattern.\n")

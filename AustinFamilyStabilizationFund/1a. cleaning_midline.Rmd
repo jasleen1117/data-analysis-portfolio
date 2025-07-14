@@ -1,0 +1,617 @@
+---
+title: "AustinFamMidline_SurveyCleaning"
+author: "Jasleen"
+date: "2025-01-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Required Libraries
+
+```{r load-libraries}
+library(tidyverse)
+library(magrittr)
+```
+
+## Define Variable Naming Conventions and Helper Functions
+
+```{r define-helpers}
+# Variable mapping for standardization
+variable_mapping <- list(
+  # Employment variables - prefix: emp_
+  "work" = "emp_status",
+  "work_hours_per_week" = "emp_hours",
+  "work_hours_change" = "emp_hours_change",
+  "work_increase" = "emp_increase",
+  "work_decrease" = "emp_decrease",
+  "work_no_reason" = "emp_unemployed_reason",
+  "work_no_reason_care" = "emp_unemployed_care",
+  
+  # Housing variables - prefix: house_
+  "housing_situation" = "house_status",
+  "housing_burden" = "house_burden",
+  "housing_behind" = "house_payments_behind",
+  "moved_last_6mo" = "house_moved",
+  "moved_last_6mo_num" = "house_moved_count",
+  "move_reason" = "house_move_reason",
+  
+  # Wellbeing variables - keep wb_ prefix
+  "wb_anxious" = "wb_anxious",
+  "wb_worry" = "wb_worry",
+  "wb_interest" = "wb_interest",
+  "wb_down" = "wb_down",
+  "wb_food_enough" = "wb_food_security",
+  "wb_health_perception" = "wb_health_status",
+  
+  # Childcare variables - prefix: cc_
+  "care_under_18" = "cc_has_children",
+  "children_range" = "cc_age_range",
+  "under_5_enroll" = "cc_under5_care",
+  "above_5_enroll" = "cc_5to12_care",
+  "above_12_enroll" = "cc_above12_care",
+  "childcare_situation" = "cc_arrangement",
+  "childcare_costs" = "cc_cost",
+  
+  # Financial & Goals - prefixes: fin_ and goal_
+  "expenses_difficulty" = "fin_expense_difficulty",
+  "spend_needs_meet" = "fin_needs_met",
+  "fin_emergency" = "fin_emergency_fund",
+  "goals_select" = "goal_priority",
+  "goals_house" = "goal_housing",
+  "goals_job" = "goal_employment",
+  "goals_ed" = "goal_education"
+)
+# Helper function to handle "please specify" responses
+handle_specify_responses <- function(df) {
+  df %>%
+    mutate(
+      # Create new variable names for specify responses
+      is_specify = str_detect(tolower(question_text), "(please specify)|(please describe)"),
+      variable_name = if_else(is_specify,
+                            paste0(variable_name, "_specify"),
+                            variable_name)
+    )
+}
+
+# Helper function to clean text responses
+clean_text_responses <- function(x) {
+  if(is.character(x)) {
+    x %>%
+      str_trim() %>%
+      str_squish() %>%
+      str_replace_all("[\\r\\n]", " ") %>%
+      na_if("") %>%
+      na_if("NA") %>%
+      na_if("N/A")
+  } else {
+    x
+  }
+}
+
+# Helper function to add timepoint suffix
+add_timepoint <- function(df, timepoint = "m") {
+  names(df) <- paste0(names(df), "_", timepoint)
+  names(df) <- gsub(pattern = "responseid_[bm]$", 
+                   replacement = "responseid", 
+                   x = names(df))
+  return(df)
+}
+
+# Helper function to standardize variable names
+standardize_names <- function(df, mapping) {
+  for(old_name in names(mapping)) {
+    if(old_name %in% names(df)) {
+      df <- df %>% rename(!!mapping[[old_name]] := old_name)
+    }
+  }
+  return(df)
+}
+```
+
+## Read and Initial Clean Data
+
+```{r read-data}
+# Read the CSV file
+midline_data <- read_csv("austin_fam_midline.csv",
+                        na = c("", "NA", "N/A", "#N/A", "NULL", "null"))
+
+```
+
+```{r,}
+print("Initial data dimensions:")
+print(dim(midline_data))
+
+# Check the Finished column values
+print("Values in Finished column:")
+print(table(midline_data$Finished))
+
+# Check initial data
+print(paste("Initial rows:", nrow(midline_data)))
+
+# Modified cleaning with proper Finished filter
+midline_clean <- midline_data %>%
+  # Remove the ImportId row and keep only TRUE/1
+  filter(Finished %in% c("TRUE", "1", TRUE)) %>%
+  {
+    print(paste("Rows after Finished filter:", nrow(.)))
+    .
+  } %>%
+  # Clean column names
+  rename_all(~tolower(gsub(" ", "_", .))) %>%
+  {
+    print(paste("Rows after rename:", nrow(.)))
+    .
+  } %>%
+  # Standardize variable names
+  standardize_names(variable_mapping) %>%
+  {
+    print(paste("Rows after standardize:", nrow(.)))
+    .
+  } %>%
+  # Add timepoint suffix
+  add_timepoint("m") %>%
+  {
+    print(paste("Final rows:", nrow(.)))
+    .
+  }
+```
+
+```{r,}
+# Modified cleaning with corrected filter
+midline_clean <- midline_data %>%
+  # Keep both TRUE and "Finished" rows, exclude only the ImportId row
+  filter(!Finished == '{"ImportId":"finished"}') %>%
+  {
+    print(paste("Rows after Finished filter:", nrow(.)))
+    .
+  } %>%
+  # Clean column names
+  rename_all(~tolower(gsub(" ", "_", .))) %>%
+  {
+    print(paste("Rows after rename:", nrow(.)))
+    .
+  } %>%
+  # Standardize variable names
+  standardize_names(variable_mapping) %>%
+  {
+    print(paste("Rows after standardize:", nrow(.)))
+    .
+  } %>%
+  # Add timepoint suffix
+  add_timepoint("m") %>%
+  {
+    print(paste("Final rows:", nrow(.)))
+    .
+  }
+```
+
+## Clean Individual Sections
+
+### Employment Section
+```{r employment-cleaning}
+# Employment Section Cleaning
+emp_clean <- midline_clean %>%
+  select(responseid, 
+         starts_with("emp_"),
+         contains("work")) %>%
+  mutate(
+    # Convert categorical to factors
+    across(matches("emp_status|emp_increase|emp_decrease|emp_unemployed"), as.factor),
+    # Handle numeric variables
+    emp_hours_m = as.numeric(emp_hours_m),
+    # Clean text responses
+    across(ends_with(c("_text_m")), clean_text_responses),
+    # Add logic checks
+    emp_hours_valid = case_when(
+      emp_status_m == "No" & !is.na(emp_hours_m) ~ FALSE,
+      emp_hours_m > 168 ~ FALSE,
+      TRUE ~ TRUE
+    )
+  )
+
+# Let's examine the employment data quality
+print("Employment Status Distribution:")
+print(table(emp_clean$emp_status_m, useNA = "ifany"))
+
+print("Hours Distribution:")
+print(summary(emp_clean$emp_hours_m))
+
+print("Number of Invalid Hours:")
+print(sum(!emp_clean$emp_hours_valid, na.rm = TRUE))
+
+# Check for problematic patterns
+emp_problems <- emp_clean %>%
+  filter(
+    # People saying they don't work but reporting hours
+    (emp_status_m == "No" & !is.na(emp_hours_m)) |
+    # Unrealistic hours
+    emp_hours_m > 168 |
+    # Inconsistent unemployment reasons
+    (emp_status_m == "Yes" & !is.na(emp_unemployed_reason_m))
+  )
+
+print("Number of problematic cases:")
+print(nrow(emp_problems))
+```
+
+# Housing Section Cleaning
+```{r housing-clean}
+# Housing Section Cleaning - Modified to handle move counts correctly
+housing_clean <- midline_clean %>%
+  select(responseid, 
+         starts_with("house_"),
+         contains("move")) %>%
+  mutate(
+    # Clean housing status
+    house_status_m = case_when(
+      str_detect(house_status_m, "^We honor") ~ NA_character_,
+      TRUE ~ house_status_m
+    ),
+    house_status_m = as.factor(house_status_m),
+    
+    # Convert other categoricals to factors
+    across(c(house_burden_m, house_payments_behind_m, 
+             house_moved_m), as.factor),
+             
+    # Convert move count from text to numeric
+    house_moved_count_clean = case_when(
+      house_moved_count_m == "1 time" ~ 1,
+      house_moved_count_m == "2 times" ~ 2,
+      house_moved_count_m == "3 or more times" ~ 3,
+      str_detect(house_moved_count_m, "^How many times") ~ NA_real_,
+      TRUE ~ NA_real_
+    ),
+    
+    # Add validity check
+    moves_valid = case_when(
+      house_moved_m == "No" & !is.na(house_moved_count_clean) ~ FALSE,
+      TRUE ~ TRUE
+    )
+  )
+
+# Check cleaned data
+print("Housing Status Distribution (cleaned):")
+print(table(housing_clean$house_status_m, useNA = "ifany"))
+
+print("Move Count Distribution (cleaned):")
+print(table(housing_clean$house_moved_count_clean, useNA = "ifany"))
+
+print("Number of Invalid Cases:")
+print(sum(!housing_clean$moves_valid, na.rm = TRUE))
+```
+
+# wellbeing data cleaning
+```{r wellbeing-cleaning}
+wellbeing_clean <- midline_clean %>%
+  select(responseid, 
+         starts_with("wb_")) %>%
+  mutate(
+    # Clean anxiety and depression measures
+    across(c(wb_anxious_m, wb_worry_m, wb_interest_m, wb_down_m), 
+           ~case_when(
+             str_detect(., "^Over the last") ~ NA_character_,
+             TRUE ~ .
+           )),
+    
+    # Clean food security
+    wb_food_security_m = case_when(
+      str_detect(wb_food_security_m, "^Getting enough food") ~ NA_character_,
+      TRUE ~ wb_food_security_m
+    ),
+    
+    # Clean health status
+    wb_health_status_m = case_when(
+      str_detect(wb_health_status_m, "^Would you say") ~ NA_character_,
+      TRUE ~ wb_health_status_m
+    ),
+    
+    # Convert all to factors
+    across(starts_with("wb_"), as.factor),
+    
+    # Add validation flags
+    wb_mental_health_complete = !if_any(c(wb_anxious_m, wb_worry_m, wb_interest_m, wb_down_m), is.na),
+    wb_food_health_complete = !if_any(c(wb_food_security_m, wb_health_status_m), is.na)
+  )
+
+# Check cleaned distributions
+print("MENTAL HEALTH MEASURES:")
+for(col in c("wb_anxious_m", "wb_worry_m", "wb_interest_m", "wb_down_m")) {
+  print(paste("\n", col, ":"))
+  print(table(wellbeing_clean[[col]], useNA = "ifany"))
+}
+
+print("\nFOOD SECURITY AND HEALTH STATUS:")
+print("\nFood Security:")
+print(table(wellbeing_clean$wb_food_security_m, useNA = "ifany"))
+print("\nHealth Status:")
+print(table(wellbeing_clean$wb_health_status_m, useNA = "ifany"))
+
+print("\nCompletion Rates:")
+print(paste("Mental health measures complete:", sum(wellbeing_clean$wb_mental_health_complete)))
+print(paste("Food/health measures complete:", sum(wellbeing_clean$wb_food_health_complete)))
+```
+
+# Childcare Section Cleaning
+```{r childcare-cleaning}
+childcare_clean <- midline_clean %>%
+  select(responseid, 
+         starts_with("cc_"),
+         contains("child"),
+         contains("care")) %>%
+  mutate(
+    # Clean has_children responses
+    cc_has_children_m = case_when(
+      str_detect(cc_has_children_m, "^Families take") ~ NA_character_,
+      TRUE ~ cc_has_children_m
+    ),
+    
+    # Clean age range but maintain original categories
+    cc_age_range_m = case_when(
+      str_detect(cc_age_range_m, "^For the kids") ~ NA_character_,
+      TRUE ~ cc_age_range_m
+    ),
+    
+    # Clean childcare arrangement
+    cc_arrangement_m = case_when(
+      str_detect(cc_arrangement_m, "^Over the past") ~ NA_character_,
+      TRUE ~ cc_arrangement_m
+    ),
+    
+    # Convert to factors
+    cc_has_children_m = as.factor(cc_has_children_m),
+    cc_age_range_m = as.factor(cc_age_range_m),
+    cc_arrangement_m = as.factor(cc_arrangement_m)
+  )
+
+# Check distributions
+print("Has Children Distribution (cleaned):")
+print(table(childcare_clean$cc_has_children_m, useNA = "ifany"))
+
+print("\nAge Range Distribution (original categories):")
+print(table(childcare_clean$cc_age_range_m[childcare_clean$cc_has_children_m == "Yes"], 
+            useNA = "ifany"))
+
+print("\nChildcare Arrangement:")
+print(table(childcare_clean$cc_arrangement_m[childcare_clean$cc_has_children_m == "Yes"], 
+            useNA = "ifany"))
+
+childcare_clean <- childcare_clean %>%
+  mutate(
+    # Add validity checks
+    valid_response = case_when(
+      is.na(cc_has_children_m) ~ FALSE,
+      cc_has_children_m == "Yes" & is.na(cc_age_range_m) ~ FALSE,
+      cc_has_children_m == "Yes" & is.na(cc_arrangement_m) ~ FALSE,
+      cc_has_children_m == "No" & !is.na(cc_age_range_m) ~ FALSE,
+      cc_has_children_m == "No" & !is.na(cc_arrangement_m) ~ FALSE,
+      TRUE ~ TRUE
+    )
+  )
+
+# Check validity
+print("\nValidity Summary:")
+print(paste("Number of invalid cases:", sum(!childcare_clean$valid_response)))
+print(paste("Percent valid:", round(mean(childcare_clean$valid_response) * 100, 1), "%"))
+```
+
+# Financial and Impact Section Cleaning
+```{r financial-income cleaning}
+financial_clean <- midline_clean %>%
+  select(responseid, 
+         starts_with("fin_"),
+         contains("expense"),
+         contains("benefit"),
+         contains("emergency"),
+         contains("needs"),
+         contains("spend")) %>%
+  mutate(
+    # Clean expense difficulty
+    fin_expense_difficulty_m = case_when(
+      str_detect(fin_expense_difficulty_m, "^In the last month") ~ NA_character_,
+      TRUE ~ fin_expense_difficulty_m
+    ),
+    
+    # Clean emergency fund response
+    fin_emergency_fund_m = case_when(
+      str_detect(fin_emergency_fund_m, "^In the past") ~ NA_character_,
+      TRUE ~ fin_emergency_fund_m
+    ),
+    
+    # Create binary indicators for emergency management strategies
+    emergency_borrowed_family = ifelse(is.na(fin_emergency_select_m), FALSE, 
+                                     str_detect(fin_emergency_select_m, "borrowed money from family")),
+    emergency_reduced_spending = ifelse(is.na(fin_emergency_select_m), FALSE,
+                                      str_detect(fin_emergency_select_m, "reduce spending")),
+    emergency_loan_credit = ifelse(is.na(fin_emergency_select_m), FALSE,
+                                 str_detect(fin_emergency_select_m, "loan or used a credit card")),
+    emergency_used_savings = ifelse(is.na(fin_emergency_select_m), FALSE,
+                                  str_detect(fin_emergency_select_m, "emergency fund")),
+    emergency_used_uptogether = ifelse(is.na(fin_emergency_select_m), FALSE,
+                                     str_detect(fin_emergency_select_m, "UpTogether investment")),
+    
+    # Create binary indicators for needs met sources
+    needs_regular_income = ifelse(is.na(fin_needs_met_m), FALSE,
+                                str_detect(fin_needs_met_m, "Regular income sources")),
+    needs_credit = ifelse(is.na(fin_needs_met_m), FALSE,
+                         str_detect(fin_needs_met_m, "Credit cards or loans")),
+    needs_savings = ifelse(is.na(fin_needs_met_m), FALSE,
+                          str_detect(fin_needs_met_m, "Money from savings")),
+    needs_borrowing = ifelse(is.na(fin_needs_met_m), FALSE,
+                            str_detect(fin_needs_met_m, "Borrowing from friends")),
+    needs_snap = ifelse(is.na(fin_needs_met_m), FALSE,
+                       str_detect(fin_needs_met_m, "SNAP")),
+    needs_wic = ifelse(is.na(fin_needs_met_m), FALSE,
+                      str_detect(fin_needs_met_m, "WIC")),
+    needs_school_meals = ifelse(is.na(fin_needs_met_m), FALSE,
+                               str_detect(fin_needs_met_m, "School meal")),
+    needs_rental = ifelse(is.na(fin_needs_met_m), FALSE,
+                         str_detect(fin_needs_met_m, "Rental Assistance")),
+    needs_unemployment = ifelse(is.na(fin_needs_met_m), FALSE,
+                              str_detect(fin_needs_met_m, "Unemployment insurance")),
+    needs_other = ifelse(is.na(fin_needs_met_m), FALSE,
+                        str_detect(fin_needs_met_m, "Other")),
+    
+    # Convert to factors
+    fin_expense_difficulty_m = as.factor(fin_expense_difficulty_m),
+    fin_emergency_fund_m = as.factor(fin_emergency_fund_m)
+  )
+
+# Check distributions with na.rm=TRUE
+print("Emergency Management Strategies (% of those with emergencies):")
+print(paste("Borrowed from family/friends:", 
+            round(mean(financial_clean$emergency_borrowed_family[financial_clean$fin_emergency_fund_m == "Yes"], na.rm=TRUE) * 100, 1), "%"))
+print(paste("Reduced spending:", 
+            round(mean(financial_clean$emergency_reduced_spending[financial_clean$fin_emergency_fund_m == "Yes"], na.rm=TRUE) * 100, 1), "%"))
+print(paste("Used loan/credit:", 
+            round(mean(financial_clean$emergency_loan_credit[financial_clean$fin_emergency_fund_m == "Yes"], na.rm=TRUE) * 100, 1), "%"))
+print(paste("Used emergency fund:", 
+            round(mean(financial_clean$emergency_used_savings[financial_clean$fin_emergency_fund_m == "Yes"], na.rm=TRUE) * 100, 1), "%"))
+print(paste("Used UpTogether:", 
+            round(mean(financial_clean$emergency_used_uptogether[financial_clean$fin_emergency_fund_m == "Yes"], na.rm=TRUE) * 100, 1), "%"))
+
+print("\nNeeds Met Sources (% of all respondents):")
+print(paste("Regular income:", round(mean(financial_clean$needs_regular_income, na.rm=TRUE) * 100, 1), "%"))
+print(paste("Credit/loans:", round(mean(financial_clean$needs_credit, na.rm=TRUE) * 100, 1), "%"))
+print(paste("Savings:", round(mean(financial_clean$needs_savings, na.rm=TRUE) * 100, 1), "%"))
+print(paste("Borrowing:", round(mean(financial_clean$needs_borrowing, na.rm=TRUE) * 100, 1), "%"))
+print(paste("SNAP:", round(mean(financial_clean$needs_snap, na.rm=TRUE) * 100, 1), "%"))
+print(paste("WIC:", round(mean(financial_clean$needs_wic, na.rm=TRUE) * 100, 1), "%"))
+print(paste("School meals:", round(mean(financial_clean$needs_school_meals, na.rm=TRUE) * 100, 1), "%"))
+print(paste("Rental assistance:", round(mean(financial_clean$needs_rental, na.rm=TRUE) * 100, 1), "%"))
+print(paste("Unemployment:", round(mean(financial_clean$needs_unemployment, na.rm=TRUE) * 100, 1), "%"))
+print(paste("Other:", round(mean(financial_clean$needs_other, na.rm=TRUE) * 100, 1), "%"))
+```
+# Cleaning Goals Section
+```{r goals}
+goals_clean <- midline_clean %>%
+  select(responseid, 
+         starts_with("goal_"),
+         starts_with("goals_")) %>%
+  mutate(
+    # Clean main goals question
+    goals_m = case_when(
+      str_detect(goals_m, "^At this point") ~ NA_character_,
+      TRUE ~ goals_m
+    ),
+    
+    # Create binary indicators for each goal type
+    goal_housing = str_detect(goal_priority_m, "housing situation"),
+    goal_employment = str_detect(goal_priority_m, "employment status"),
+    goal_education = str_detect(goal_priority_m, "education"),
+    goal_debt = str_detect(goal_priority_m, "debt"),
+    goal_savings = str_detect(goal_priority_m, "Saving for the future"),
+    goal_transport = str_detect(goal_priority_m, "transportation"),
+    goal_other = str_detect(goal_priority_m, "Other"),
+    
+    # Convert main goals to factor
+    goals_m = as.factor(goals_m),
+    
+    # Add validity check
+    goals_response_valid = !is.na(goals_m),
+    has_priority_goals = if_else(goals_m == "Yes", 
+                               !is.na(goal_priority_m), 
+                               TRUE)
+  )
+
+# Check distributions
+print("Main Goals Distribution:")
+print(table(goals_clean$goals_m, useNA = "ifany"))
+
+print("\nType of Goals Selected (among those with goals):")
+goals_summary <- goals_clean %>%
+  filter(goals_m == "Yes") %>%
+  summarise(
+    Housing = sum(goal_housing),
+    Employment = sum(goal_employment),
+    Education = sum(goal_education),
+    Debt = sum(goal_debt),
+    Savings = sum(goal_savings),
+    Transportation = sum(goal_transport),
+    Other = sum(goal_other)
+  )
+print(goals_summary)
+
+print("\nValidity:")
+print(paste("Valid responses:", sum(goals_clean$goals_response_valid)))
+print(paste("Has priority goals (when expected):", sum(goals_clean$has_priority_goals, na.rm = TRUE)))
+```
+# Community and Social capital section cleaning
+```{r Community-social capital}
+community_clean <- midline_clean %>%
+  select(responseid,
+         starts_with("comm_"),
+         starts_with("ripple_"),
+         starts_with("impact_ripple")) %>%
+  mutate(
+    # Clean and convert to factors
+    across(starts_with("comm_give"), ~case_when(
+      . %in% c("Never", "Sometimes", "Often") ~ .,
+      TRUE ~ NA_character_
+    )),
+    
+    # Convert to numeric scores (0-2)
+    across(starts_with("comm_give"), ~case_when(
+      . == "Never" ~ 0L,
+      . == "Sometimes" ~ 1L,
+      . == "Often" ~ 2L,
+      TRUE ~ NA_integer_
+    ), .names = "{.col}_score"),
+    
+    # Calculate total support score
+    support_score_total = rowSums(across(ends_with("_score")), na.rm = TRUE),
+    
+    # Create binary indicators (TRUE/FALSE)
+    gives_emotional = ifelse(!is.na(comm_give_emo_supp_m), 
+                           comm_give_emo_supp_m %in% c("Often", "Sometimes"), 
+                           NA),
+    
+    gives_material = ifelse(!is.na(comm_give_money_m) & !is.na(comm_give_food_m),
+                           (comm_give_money_m %in% c("Often", "Sometimes") | 
+                            comm_give_food_m %in% c("Often", "Sometimes")),
+                           NA),
+    
+    gives_practical = ifelse(!is.na(comm_give_transport_m) & !is.na(comm_give_errands_m),
+                            (comm_give_transport_m %in% c("Often", "Sometimes") | 
+                             comm_give_errands_m %in% c("Often", "Sometimes")),
+                            NA),
+    
+    # Ripple effects (TRUE/FALSE)
+    supports_family = ripple_fam_select_m == "Yes",
+    supports_community = ripple_comm_select_m == "Yes",
+    
+    # Convert original variables to factors
+    across(c(starts_with("comm_give"), 
+             ends_with("select_m")), as.factor)
+  )
+
+# Check distributions
+print("Support Score Summary:")
+print(summary(community_clean$support_score_total))
+
+print("\nSupport Types (% giving sometimes/often):")
+print(paste("Emotional support:", 
+            round(mean(community_clean$gives_emotional, na.rm=TRUE) * 100), "%"))
+print(paste("Material support:", 
+            round(mean(community_clean$gives_material, na.rm=TRUE) * 100), "%"))
+print(paste("Practical support:", 
+            round(mean(community_clean$gives_practical, na.rm=TRUE) * 100), "%"))
+
+print("\nRipple Effects:")
+print(table(community_clean$supports_family, useNA = "ifany"))
+print(table(community_clean$supports_community, useNA = "ifany"))
+```
+# Cleaned dataset
+```{r final-cleaned dataset}
+
+# Output the final merged dataset
+write.csv(midline_clean, "midline_survey_final_cleaned.csv", row.names = FALSE)
+
+# Print out some information about the final dataset
+cat("Midline Survey Clean Dataset\n")
+cat("Total number of respondents:", nrow(midline_clean), "\n")
+cat("Number of columns in dataset:", ncol(midline_clean), "\n")
+```
+

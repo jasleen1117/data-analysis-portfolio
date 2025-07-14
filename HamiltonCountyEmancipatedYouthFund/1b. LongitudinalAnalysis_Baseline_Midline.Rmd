@@ -1,0 +1,1604 @@
+---
+title: "Longitudinal_HamiltonCounty"
+author: "Jasleen"
+date: "2025-04-13"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: united
+    highlight: tango
+    code_folding: hide
+    fig_caption: true
+    df_print: kable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,          # Show code
+  message = FALSE,       # Don't show messages
+  warning = FALSE,       # Don't show warnings
+  fig.align = "center",  # Center figures
+  out.width = "80%",     # Control figure width
+  fig.width = 10,        # Set figure width
+  fig.height = 6         # Set figure height
+)
+```
+
+```{r, libraries}
+#### load libraries
+library(janitor) # Simple Tools for Examining and Cleaning Dirty Data, CRAN v2.1.0
+library(tidyverse) # Easily Install and Load the 'Tidyverse', CRAN v1.3.1
+library(lubridate) # Make Dealing with Dates a Little Easier, CRAN v1.7.10
+library(dplyr)
+library(tidyr)
+library(readr) #Reading CSVs
+library(stringr)
+library(ggplot2) #For visualization
+library(scales) #For visualization
+library(forcats) #Helps with ordering numbers and values
+library(RColorBrewer) #For Visualization
+library(grid) #To draw Venn Diagram
+library(reshape2) #For HeatMaps
+library(knitr)
+library(scales)
+library(RColorBrewer)
+library(cluster)
+library(kableExtra)
+```
+
+```{r, merging}
+# Import the datasets
+baseline <- read.csv("hamilton_county_baseline_wide.csv")
+midline <- read.csv("hamilton_county_midline_wide.csv")
+
+# Perform merge using entity_uuid as the unique identifier
+merged_data <- baseline %>%
+  inner_join(midline, by = "entity_uuid", suffix = c("_b", "_m"))
+
+response_count <- nrow(merged_data)
+
+# Create a summary table
+summary_stats <- data.frame(
+  "Total Baseline" = nrow(baseline),
+  "Total Midline" = nrow(midline),
+  "Responded to Both" = response_count,
+  "Response Rate (Baseline)" = round(response_count / nrow(baseline) * 100, 1),
+  "Response Rate (Midline)" = round(response_count / nrow(midline) * 100, 1)
+)
+
+# Print summary statistics using kable
+kable(summary_stats, format = "html", digits = 1, caption = "Summary of Survey Response Rates") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                full_width = FALSE) %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#46214A")
+
+# Save the merged dataset for further analysis
+write.csv(merged_data, "merged_baseline_midline.csv", row.names = FALSE)
+n_respondents <- nrow(merged_data)
+```
+## Demographics:Race {.tabset}
+```{r,}
+# Get list of participant IDs who completed both surveys
+matched_ids <- midline$entity_uuid
+# Calculate overall retention
+total_baseline <- nrow(baseline)
+total_retained <- sum(baseline$entity_uuid %in% matched_ids)
+overall_retention <- round((total_retained / total_baseline) * 100, 1)
+# Print overall retention statistics
+cat(sprintf("Overall retention rate: %.1f%% (%d out of %d baseline respondents completed midline)\n", 
+            overall_retention, total_retained, total_baseline))
+# Show unique race categories in baseline
+unique_races <- baseline %>%
+  select(demo_race) %>%
+  distinct()
+# Calculate retention rates by race
+retention_by_race <- baseline %>%
+  mutate(
+    race_category = case_when(
+      grepl("Black or African American", demo_race) & !grepl(",", demo_race) ~ "Black or\nAfrican American",
+      grepl("White", demo_race) & !grepl(",", demo_race) ~ "White",
+      grepl(",", demo_race) ~ "Multiracial",
+      demo_race == "Other (please specify)" ~ "Other",
+      demo_race == "Prefer not to answer" ~ "Prefer not to answer",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  group_by(race_category) %>%
+  summarise(
+    total = n(),
+    retained = sum(entity_uuid %in% matched_ids),
+    retention_rate = round((retained/total) * 100, 0)  
+  ) %>%
+  # Include all categories with at least 2 respondents
+  filter(total >= 2) %>%
+  arrange(desc(retention_rate))
+cat("\n\n### Retentions rates by race category:\n")
+knitr::kable(retention_by_race, 
+             caption = "Retention rates by race category",
+             digits = 1)
+# Create visualization
+# Create visualization
+retention_plot <- ggplot(retention_by_race, 
+       aes(x = reorder(race_category, retention_rate), 
+           y = retention_rate)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = sprintf("%d%%", retention_rate)), 
+            hjust = 1.5,  # Center the text horizontally (inside bar)
+            vjust = 0.5,  # Center the text vertically
+            color = "white",  # Changed text color to white
+            size = 6,  
+            family = "Arial",
+            fontface = "bold"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.title.x = element_text(size = 20, family = "Arial", face = "bold"),
+    axis.title.y = element_blank(),  # Remove x-axis label
+    axis.text = element_text(size = 18, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 18, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold")
+  ) +
+  labs(
+    title = "Retention Rates by Race",
+    y = "Retention Rate (%)",
+    x = NULL  # Remove x-axis label
+  ) +
+  scale_y_continuous(
+    limits = c(0,100),
+    labels = function(x) sprintf("%d%%", x) 
+  ) +
+  coord_flip()
+# Display the plot
+print(retention_plot)
+# Save the visualization
+ggsave("retention_by_race.png", 
+       plot = retention_plot,
+       width = 10, 
+       height = 7, 
+       dpi = 300)
+```
+## Demographics: Gender {.tabset}
+```{r, gender}
+# Create and populate the SOGI categories
+baseline_with_sogi <- baseline %>%
+  mutate(
+    # Create cisgender flag
+    cisgender = case_when(
+      demo_sex_at_birth == "Male" & demo_gender == "Man" ~ 1,
+      demo_sex_at_birth == "Female" & demo_gender == "Woman" ~ 1,
+      TRUE ~ 0
+    ),
+    
+    # Create transgender flag
+    transgender = case_when(
+      demo_sex_at_birth == "Male" & demo_gender %in% c("Woman", "Transgender", "Nonbinary") ~ 1,
+      demo_sex_at_birth == "Female" & demo_gender %in% c("Man", "Transgender", "Nonbinary") ~ 1,
+      TRUE ~ 0
+    ),
+    
+    # Create SOGI category
+    sogi = case_when(
+      # LGBTQ+ cases
+      transgender == 1 ~ "LGBTQ+",
+      demo_sexual_orient == "Gay or lesbian" ~ "LGBTQ+",
+      demo_sexual_orient == "Bisexual" ~ "LGBTQ+",
+      demo_sexual_orient == "I don't know" ~ "LGBTQ+",
+      demo_sexual_orient == "Something else (please specify)" & 
+        (!is.na(demo_sexual_orient_4_TEXT) & 
+           !(demo_sexual_orient_4_TEXT %in% c("Mujer", "Feminina"))) ~ "LGBTQ+",
+      
+      # Cisgender-Heterosexual cases
+      cisgender == 1 & demo_sexual_orient == "Straight, that is not gay or lesbian" ~ "Cisgender-Heterosexual",
+      
+      # Prefer not to answer cases
+      demo_sexual_orient == "Prefer not to answer" ~ "Prefer not to answer",
+      
+      # Default case
+      TRUE ~ "Unknown"
+    )
+  )
+
+# Check SOGI distribution
+sogi_distribution <- baseline_with_sogi %>%
+  count(sogi) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+# Calculate retention rates by SOGI
+retention_by_sogi <- baseline_with_sogi %>%
+  group_by(sogi) %>%
+  summarise(
+    total = n(),
+    retained = sum(entity_uuid %in% matched_ids),
+    retention_rate = round((retained/total) * 100, 1)  
+  ) %>%
+  # Include groups with at least 2 respondents
+  filter(total >= 2) %>%
+  arrange(desc(retention_rate))
+
+cat("\n\n### Retentions rates - SOGI:\n")
+knitr::kable(retention_by_sogi, 
+             caption = "Retention rates by SOGI",
+             digits = 1)
+
+# Create version with counts
+retention_with_counts <- retention_by_sogi %>%
+  mutate(
+    count_label = paste0("n=", total),
+    retained_label = paste0(retained, "/", total)
+  )
+
+# Create detailed visualization with counts
+ggplot(retention_with_counts, 
+       aes(x = reorder(sogi, retention_rate), 
+           y = retention_rate)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = sprintf("%.1f%%", retention_rate)), 
+            hjust = -0.2,
+            color = "black",
+            size = 6,
+            family = "Arial",
+            fontface = "bold"
+  ) +
+  geom_text(aes(y = 5, label = retained_label),
+            hjust = 0,
+            color = "white",
+            size = 4,
+            family = "Arial"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_text(size = 18, family = "Arial", face = "bold"),
+    axis.text = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.title = element_text(size = 16, family = "Arial", face = "bold"),
+    plot.subtitle = element_text(size = 12, family = "Arial", face = "bold")
+  ) +
+  labs(
+    title = "Retention Rates by Sexual Orientation and Gender Identity",
+    subtitle = sprintf("%.1f%% (%d out of %d) baseline respondents completed the midline survey", 
+                      overall_retention, total_retained, total_baseline),
+    x = NULL,
+    y = "Retention Rate (%)"
+  ) +
+  scale_y_continuous(
+    limits = c(0, max(retention_by_sogi$retention_rate) * 1.2),
+    labels = function(x) sprintf("%.1f%%", x)
+  ) +
+  coord_flip()
+```
+#race and gender {tabset}
+```{r,}
+# Calculate retention rates by race and gender
+retention_by_race_gender <- baseline %>%
+  # Create simplified race categories as before
+  mutate(
+    race_category = case_when(
+      grepl("Black or African American", demo_race) & !grepl(",", demo_race) ~ "Black or African American",
+      grepl("White", demo_race) & !grepl(",", demo_race) ~ "White",
+      grepl(",", demo_race) ~ "Multiracial",
+      demo_race == "Other (please specify)" ~ "Other",
+      demo_race == "Prefer not to answer" ~ "Prefer not to answer",
+      TRUE ~ "Other"
+    ),
+    # Simplify gender to Men/Women for this analysis
+    gender_category = case_when(
+      demo_gender == "Man" ~ "Men",
+      demo_gender == "Woman" ~ "Women",
+      TRUE ~ "Other/Not specified"
+    )
+  ) %>%
+  # Group by both race and gender
+  group_by(race_category, gender_category) %>%
+  summarise(
+    total = n(),
+    retained = sum(entity_uuid %in% matched_ids),
+    retention_rate = round((retained/total) * 100, 0)  
+  ) %>%
+  # Include only groups with at least 2 respondents for privacy
+  filter(total >= 2) %>%
+  # Arrange by race and then by gender
+  arrange(race_category, gender_category)
+
+# Display the results
+cat("\n### Retention rates by race and gender:\n")
+knitr::kable(retention_by_race_gender, 
+             caption = "Retention rates by race and gender",
+             digits = 1)
+
+# Create a summary string
+retention_summary <- retention_by_race_gender %>%
+  filter(gender_category %in% c("Men", "Women")) %>%
+  mutate(
+    summary_text = sprintf("%d%% %s %s responded to both surveys (%d out of %d)", 
+                          retention_rate, race_category, gender_category, retained, total)
+  ) %>%
+  pull(summary_text)
+
+# Print the summary in a paragraph format
+cat("\n### Summary:\n", paste(retention_summary, collapse = ", "), ".\n")
+
+
+
+
+```
+## Education and Enrollment {.tabset}
+```{r, education}
+# Recategorize education levels in both baseline and midline
+merged_data <- merged_data %>%
+  mutate(
+    edu_highest_level_b = case_when(
+      edu_highest_level_b == "Less than high school" ~ "Less than HS",
+      edu_highest_level_b == "High school diploma or equivalent GED" ~ "High school/GED",
+      edu_highest_level_b == "Some college, no degree or certification (including currently enrolled in college)" ~ "Some college",
+      edu_highest_level_b == "Certificate or technical degree" ~ "Certificate/Technical",
+      edu_highest_level_b == "Associates degree" ~ "Associate's",
+      edu_highest_level_b == "Bachelor's degree" ~ "Bachelor's",
+      edu_highest_level_b == "Master's degree" ~ "Master's",
+      edu_highest_level_b == "Professional or Doctorate degree" ~ "Prof./Doctorate",
+      edu_highest_level_b == "Other (please specify)" ~ "Other",
+      edu_highest_level_b == "Prefer not to answer" ~ "Prefer not to answer",
+      TRUE ~ as.character(edu_highest_level_b)
+    ),
+    edu_highest_level_m = case_when(
+      edu_highest_level_m == "Less than high school" ~ "Less than HS",
+      edu_highest_level_m == "High school diploma or equivalent GED" ~ "High school/GED",
+      edu_highest_level_m == "Some college, no degree or certification (including currently enrolled in college)" ~ "Some college",
+      edu_highest_level_m == "Certificate or technical degree" ~ "Certificate/Technical",
+      edu_highest_level_m == "Associates degree" ~ "Associate's",
+      edu_highest_level_m == "Bachelor's degree" ~ "Bachelor's",
+      edu_highest_level_m == "Master's degree" ~ "Master's",
+      edu_highest_level_m == "Professional or Doctorate degree" ~ "Prof./Doctorate",
+      edu_highest_level_m == "Other (please specify)" ~ "Other",
+      edu_highest_level_m == "Prefer not to answer" ~ "Prefer not to answer",
+      TRUE ~ as.character(edu_highest_level_m)
+    )
+  )
+
+# Recategorize enrollment types
+merged_data <- merged_data %>%
+  mutate(
+    edu_cert_prog_which_b = case_when(
+      edu_cert_prog_which_b == "General Education Diploma (GED) program/High School Diploma" ~ "GED/HS Diploma",
+      edu_cert_prog_which_b == "Community College Courses (academic)" ~ "Community College",
+      edu_cert_prog_which_b == "Vocational Training (e.g., healthcare, IT, culinary arts)" ~ "Vocational Training",
+      edu_cert_prog_which_b == "Skills Building Workshop (e.g., coding bootcamp, project management certification)" ~ "Skills Workshop",
+      edu_cert_prog_which_b == "4-year College Courses" ~ "4-year College",
+      edu_cert_prog_which_b == "Technical or Trade School (e.g., carpentry, automotive technology)" ~ "Technical/Trade School",
+      edu_cert_prog_which_b == "Other (please specify)" ~ "Other",
+      TRUE ~ as.character(edu_cert_prog_which_b)
+    ),
+    edu_cert_prog_which_m = case_when(
+      edu_cert_prog_which_m == "General Education Diploma (GED) program/High School Diploma" ~ "GED/HS Diploma",
+      edu_cert_prog_which_m == "Community College Courses (academic)" ~ "Community College",
+      edu_cert_prog_which_m == "Vocational Training (e.g., healthcare, IT, culinary arts)" ~ "Vocational Training",
+      edu_cert_prog_which_m == "Skills Building Workshop (e.g., coding bootcamp, project management certification)" ~ "Skills Workshop",
+      edu_cert_prog_which_m == "4-year College Courses" ~ "4-year College",
+      edu_cert_prog_which_m == "Technical or Trade School (e.g., carpentry, automotive technology)" ~ "Technical/Trade School",
+      edu_cert_prog_which_m == "Other (please specify)" ~ "Other",
+      TRUE ~ as.character(edu_cert_prog_which_m)
+    )
+  )
+
+# Education analysis
+# 1. Compare highest education level changes
+edu_level_comparison <- merged_data %>%
+  select(entity_uuid, edu_highest_level_b, edu_highest_level_m) %>%
+  mutate(education_changed = ifelse(edu_highest_level_b != edu_highest_level_m, "Yes", "No"))
+
+# Count of education level changes
+edu_level_changes <- edu_level_comparison %>%
+  group_by(education_changed) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / n_respondents * 100, 1))
+
+# 2. Analyze specific transitions between education levels
+edu_transitions <- merged_data %>%
+  group_by(edu_highest_level_b, edu_highest_level_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / n_respondents * 100, 1))
+
+# 3. Certificate program enrollment changes
+cert_program_changes <- merged_data %>%
+  group_by(edu_cert_prog_b, edu_cert_prog_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / n_respondents * 100, 1))
+
+# Focus on those who were not enrolled at baseline but enrolled at midline
+new_enrollments <- merged_data %>%
+  filter(edu_cert_prog_b == "No" & edu_cert_prog_m == "Yes") %>%
+  select(entity_uuid, edu_cert_prog_which_m) %>%
+  group_by(edu_cert_prog_which_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+# also add to the table - the type of programs transition they were enrolled in.
+
+# Print results using kable (simplified version)
+# 1. Education level changes
+kable(edu_level_changes, 
+      col.names = c("Education Level Changed", "Count", "Percentage (%)"),
+      caption = "Changes in Highest Education Level Between Baseline and Midline")
+
+# 2. Education level transitions
+kable(edu_transitions,
+      col.names = c("Baseline Education Level", "Midline Education Level", "Count", "Percentage (%)"),
+      caption = "Transitions Between Education Levels")
+
+# 3. Certificate program enrollment changes
+kable(cert_program_changes,
+      col.names = c("Baseline Certificate Program", "Midline Certificate Program", "Count", "Percentage (%)"),
+      caption = "Changes in Certificate Program Enrollment")
+
+# 4. New enrollments (people who weren't enrolled at baseline but are at midline)
+kable(new_enrollments,
+      col.names = c("Type of Program Enrolled In", "Count", "Percentage (%)"),
+      caption = "New Enrollments (Not Enrolled at Baseline, Enrolled at Midline)")
+
+```
+## Educational Progress {.tabset}
+```{r}
+# function to handle multiple responses - ignoring commas within parentheses
+count_multiple_responses <- function(data, column) {
+  # Extract the column data
+  col_data <- as.character(data[[column]])
+  col_data <- col_data[!is.na(col_data) & col_data != "NA"]
+  
+  # Initialize an empty list to store parsed responses
+  all_parsed_responses <- list()
+  
+  # Process each row
+  for (response in col_data) {
+    # Skip NA or empty responses
+    if (is.na(response) || response == "") {
+      next
+    }
+    
+    # Initialize variables for parsing
+    parsed_responses <- c()
+    current_response <- ""
+    in_parentheses <- FALSE
+    
+    # Go through each character
+    for (i in 1:nchar(response)) {
+      char <- substr(response, i, i)
+      
+      # Track if we're inside parentheses
+      if (char == "(") {
+        in_parentheses <- TRUE
+      } else if (char == ")") {
+        in_parentheses <- FALSE
+      }
+      
+      # If we encounter a comma not inside parentheses, split
+      if (char == "," && !in_parentheses) {
+        parsed_responses <- c(parsed_responses, trimws(current_response))
+        current_response <- ""
+      } else {
+        # Otherwise, add the character to the current response
+        current_response <- paste0(current_response, char)
+      }
+    }
+    
+    # Add the last response
+    if (trimws(current_response) != "") {
+      parsed_responses <- c(parsed_responses, trimws(current_response))
+    }
+    
+    all_parsed_responses <- c(all_parsed_responses, parsed_responses)
+  }
+  
+  # Flatten the list to a vector
+  all_responses <- unlist(all_parsed_responses)
+  
+  # Count each response
+  response_counts <- table(all_responses)
+  
+  # Calculate percentages based on number of respondents (not responses)
+  n_respondents <- length(col_data)
+  
+  # Create a data frame for results
+  result_df <- data.frame(
+    Response = names(response_counts),
+    Count = as.numeric(response_counts),
+    Percentage = round(as.numeric(response_counts) / n_respondents * 100, 1)
+  )
+  
+  # Sort by count in descending order
+  result_df <- result_df[order(-result_df$Count), ]
+  
+  # Add a total row for respondents
+  result_df <- rbind(
+    result_df,
+    data.frame(
+      Response = "Total Respondents",
+      Count = n_respondents,
+      Percentage = NA
+    )
+  )
+  
+  return(result_df)
+}
+
+# Create table for educational progress
+edu_progress_table <- count_multiple_responses(merged_data, "edu_progress")
+
+# Add percentage symbol with 1 decimal place
+edu_progress_table$Percentage <- ifelse(is.na(edu_progress_table$Percentage), 
+                                      NA, 
+                                      paste0(edu_progress_table$Percentage, "%"))
+
+# Display Educational Progress
+knitr::kable(edu_progress_table, 
+             caption = "Educational Progress",
+             row.names = FALSE)
+```
+## Educational barriers {.tabset}
+```{r}
+# Count respondents who answered the education barriers question
+edu_barriers_count <- merged_data %>%
+  filter(edu_barriers != "NA", !is.na(edu_barriers)) %>%
+  nrow()
+
+# Analyze educational barriers with the multiple response function that's already defined
+edu_barriers_data <- count_multiple_responses(merged_data, "edu_barriers")
+
+# Check for "Other" reasons and get the text explanations
+other_edu_barriers <- merged_data %>%
+  filter(grepl("Other \\(please specify\\)", edu_barriers),
+         edu_barriers_9_TEXT != "NA", 
+         !is.na(edu_barriers_9_TEXT)) %>%
+  select(edu_barriers_9_TEXT)
+
+# Create a comprehensive table that includes all barriers and their text explanations
+# First, extract all the standard barriers (excluding "Other")
+standard_barriers <- data.frame(
+  barrier = c(
+    "Financial barriers",
+    "Lack of time (e.g., work or caregiving responsibilities)",
+    "I choose to focus on my career or work full-time",
+    "Health or personal challenges",
+    "Transportation issues",
+    "No suitable programs are available",
+    "Completed my program"
+  )
+)
+
+# Count each standard barrier
+standard_barriers_count <- lapply(standard_barriers$barrier, function(barrier) {
+  count <- sum(grepl(barrier, merged_data$edu_barriers, fixed = TRUE))
+  return(data.frame(
+    reason = barrier,
+    n = count,
+    type = "Standard"
+  ))
+})
+standard_barriers_df <- do.call(rbind, standard_barriers_count)
+
+# Then, get all "Other" barriers with their specific text
+other_barriers <- merged_data %>%
+  filter(grepl("Other \\(please specify\\)", edu_barriers),
+         edu_barriers_9_TEXT != "NA", 
+         !is.na(edu_barriers_9_TEXT)) %>%
+  mutate(reason = paste0("Other: ", edu_barriers_9_TEXT)) %>%
+  count(reason) %>%
+  mutate(type = "Other")
+
+# Combine all barriers
+all_barriers_education <- bind_rows(standard_barriers_df, other_barriers) %>%
+  arrange(desc(n)) %>%
+  mutate(proportion = round(n / edu_barriers_count * 100, 1))  
+
+# All types of educational barriers
+cat("\n\n### All educational barriers (sorted by frequency):\n")
+knitr::kable(all_barriers_education, 
+             caption = "Educational Barriers",
+             digits = 1)
+```
+## Employment Changes and transition {.tabset}
+```{r,}
+##########################################
+## EMPLOYMENT STATUS CHANGES ANALYSIS
+##########################################
+
+# Overall changes in employment status
+work_status_changes <- merged_data %>%
+  mutate(
+    work_status_b = case_when(
+      work_b == "Yes" ~ "Employed",
+      work_b == "No" ~ "Unemployed",
+      work_b == "Prefer not to answer" ~ "Prefer not to answer",
+      is.na(work_b) ~ "No response",
+      TRUE ~ as.character(work_b)
+    ),
+    work_status_m = case_when(
+      work_m == "Yes" ~ "Employed",
+      work_m == "No" ~ "Unemployed",
+      work_m == "Prefer not to answer" ~ "Prefer not to answer",
+      is.na(work_m) ~ "No response",
+      TRUE ~ as.character(work_m)
+    )
+  ) %>%
+  group_by(work_status_b, work_status_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+# Changes in work type
+# Create work type categorization for midline based on hours
+merged_data <- merged_data %>%
+  mutate(work_type_m = case_when(
+    work_m == "Yes" & !is.na(work_hours_per_week) & work_hours_per_week >= 35 ~ "Full-time",
+    work_m == "Yes" & !is.na(work_hours_per_week) & work_hours_per_week < 35 ~ "Part-time",
+    work_m == "No" ~ "Unemployed",
+    work_m == "Prefer not to answer" ~ "Prefer not to answer",
+    is.na(work_m) ~ "No response",
+    TRUE ~ NA_character_
+  ))
+
+# Rename work_type to work_type_b for consistency
+names(merged_data)[names(merged_data) == "work_type"] <- "work_type_b"
+
+# Fix any "Not working" values in work_type_b and handle other responses
+merged_data <- merged_data %>%
+  mutate(work_type_b = case_when(
+    work_type_b == "Not working" ~ "Unemployed",
+    work_type_b == "Prefer not to answer" ~ "Prefer not to answer",
+    is.na(work_type_b) & work_b == "No" ~ "Unemployed",
+    is.na(work_type_b) & work_b == "Prefer not to answer" ~ "Prefer not to answer",
+    is.na(work_type_b) & is.na(work_b) ~ "No response",
+    TRUE ~ as.character(work_type_b)
+  ))
+
+# Analyze transitions between work types (full-time vs part-time)
+work_type_transitions <- merged_data %>%
+  group_by(work_type_b, work_type_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+# Employment Status Changes
+kable(work_status_changes, 
+      col.names = c("Baseline Employment Status", "Midline Employment Status", "Count", "Percentage (%)"),
+      caption = "Changes in Employment Status Between Baseline and Midline")
+
+# Work Type Transitions
+kable(work_type_transitions, 
+      col.names = c("Baseline Work Type", "Midline Work Type", "Count", "Percentage (%)"),
+      caption = "Work Type Transitions (Full-time, Part-time, Unemployed)")
+
+```
+
+##Employment transitions Sankey {tabset}
+```{r, transition}
+
+library(tidyverse)
+library(networkD3)
+
+if(!"work_status_b" %in% names(merged_data) || !"work_status_m" %in% names(merged_data)) {
+  merged_data <- merged_data %>%
+    mutate(
+      work_status_b = case_when(
+        work_b == "Yes" ~ "Employed",
+        work_b == "No" ~ "Unemployed",
+        work_b == "Prefer not to answer" ~ "Prefer not to answer",
+        is.na(work_b) ~ "No response",
+        TRUE ~ as.character(work_b)
+      ),
+      work_status_m = case_when(
+        work_m == "Yes" ~ "Employed",
+        work_m == "No" ~ "Unemployed",
+        work_m == "Prefer not to answer" ~ "Prefer not to answer",
+        is.na(work_m) ~ "No response",
+        TRUE ~ as.character(work_m)
+      )
+    )
+}
+
+# Create transitions dataframe
+transitions <- merged_data %>%
+  filter(
+    !is.na(work_status_b) & !is.na(work_status_m) &
+    work_status_b != "Prefer not to answer" & work_status_m != "Prefer not to answer" &
+    work_status_b != "No response" & work_status_m != "No response"
+  ) %>%
+  select(baseline_status = work_status_b, midline_status = work_status_m) %>%
+  filter(baseline_status %in% c("Employed", "Unemployed"),
+         midline_status %in% c("Employed", "Unemployed"))
+
+# Calculate transitions summary
+transitions_summary <- transitions %>%
+  group_by(baseline_status, midline_status) %>%
+  summarise(value = n(), .groups = 'drop')
+
+# Create nodes with group properties for coloring
+nodes <- data.frame(
+  name = c("", "", "", ""),  # Empty names to remove node labels
+  group = c(1, 2, 1, 2)      # Group 1 for Employed, Group 2 for Unemployed
+)
+
+# Create links without labels
+links <- data.frame(
+  source = c(0, 0, 1, 1),
+  target = c(2, 3, 2, 3),
+  value = c(
+    nrow(filter(transitions, baseline_status == "Employed" & midline_status == "Employed")),
+    nrow(filter(transitions, baseline_status == "Employed" & midline_status == "Unemployed")),
+    nrow(filter(transitions, baseline_status == "Unemployed" & midline_status == "Employed")),
+    nrow(filter(transitions, baseline_status == "Unemployed" & midline_status == "Unemployed"))
+  )
+)
+
+# Create Sankey diagram without labels but with colors
+sankeyNetwork(Links = links, 
+              Nodes = nodes,
+              Source = "source",
+              Target = "target",
+              Value = "value",
+              NodeID = "name",
+              fontSize = 0,           # Set font size to 0 to hide text
+              nodeWidth = 40,
+              sinksRight = TRUE,
+              height = 400,           
+              width = 700,
+              colourScale = JS("d3.scaleOrdinal().domain([1,2]).range(['#46214A', '#D70073'])"),
+              NodeGroup = "group",
+              nodePadding = 20)
+
+# Save the diagram
+saveNetwork(
+  sankeyNetwork(Links = links, 
+                Nodes = nodes,
+                Source = "source",
+                Target = "target",
+                Value = "value",
+                NodeID = "name",
+                fontSize = 0,         # Set font size to 0 to hide text
+                nodeWidth = 40,
+                sinksRight = TRUE,
+                height = 400,
+                width = 700,
+                colourScale = JS("d3.scaleOrdinal().domain([1,2]).range(['#46214A', '#D70073'])"),
+                NodeGroup = "group",
+                nodePadding = 20),
+  "employment_sankey.html",
+  selfcontained = TRUE
+)
+
+library(webshot)
+
+# Generate PNG image
+webshot("employment_sankey.html", "employment_sankey.png", 
+        vwidth = 1200, vheight = 600, delay = 1, zoom = 2)
+```
+
+
+## Employment: Work Hours {.tabset}
+```{r,}
+##########################################
+## WORK HOURS CHANGE ANALYSIS
+##########################################
+
+# Analyze overall work hours change patterns
+work_hours_change_data <- merged_data %>%
+  filter(!is.na(work_hours_change)) %>%
+  count(work_hours_change) %>%
+  mutate(percentage = round(n / sum(n) * 100, 1))
+
+# Analyze reasons for decreased hours with "Other" text responses
+# Get standard decrease reasons
+work_decrease_data <- merged_data %>%
+  filter(work_hours_change == "My work hours have DECREASED") %>%
+  filter(!is.na(work_decrease), work_decrease != "Other (please specify)") %>%
+  count(reason = work_decrease) %>%
+  mutate(reason_type = "Decrease")
+
+# Get "Other" text reasons for decreased hours
+other_decrease_reasons <- merged_data %>%
+  filter(work_hours_change == "My work hours have DECREASED",
+         work_decrease == "Other (please specify)", 
+         !is.na(work_decrease_6_TEXT)) %>%
+  mutate(reason = paste0("Other: ", work_decrease_6_TEXT)) %>%
+  count(reason) %>%
+  mutate(reason_type = "Decrease")
+
+# Combine all decrease reasons
+all_decrease_reasons <- bind_rows(work_decrease_data, other_decrease_reasons) %>%
+  mutate(percentage = round(n / sum(n) * 100, 1))
+
+# Analyze reasons for increased hours with "Other" text responses
+# Get standard increase reasons
+work_increase_data <- merged_data %>%
+  filter(work_hours_change == "My work hours have INCREASED") %>%
+  filter(!is.na(work_increase), work_increase != "Other (please specify)") %>%
+  count(reason = work_increase) %>%
+  mutate(reason_type = "Increase")
+
+# Get "Other" text reasons for increased hours
+other_increase_reasons <- merged_data %>%
+  filter(work_hours_change == "My work hours have INCREASED",
+         work_increase == "Other (please specify)", 
+         !is.na(work_increase_5_TEXT)) %>%
+  mutate(reason = paste0("Other: ", work_increase_5_TEXT)) %>%
+  count(reason) %>%
+  mutate(reason_type = "Increase")
+
+# Combine all increase reasons
+all_increase_reasons <- bind_rows(work_increase_data, other_increase_reasons) %>%
+  mutate(percentage = round(n / sum(n) * 100, 1))
+
+# Combine all reasons into one comprehensive table
+all_hours_change_reasons <- bind_rows(all_decrease_reasons, all_increase_reasons) %>%
+  arrange(reason_type, desc(n))
+
+# 6. Analyze reasons for not working at midline including "Other" text responses
+# Get standard reasons for not working
+not_working_standard <- merged_data %>%
+  filter(work_m == "No",
+         !is.na(work_no_reason),
+         work_no_reason != "Other (please specify)") %>%
+  count(reason = work_no_reason) %>%
+  mutate(type = "Standard")
+
+# Get "Other" text reasons for not working
+not_working_other <- merged_data %>%
+  filter(work_m == "No",
+         work_no_reason == "Other (please specify)", 
+         !is.na(work_no_reason_7_TEXT)) %>%
+  mutate(reason = paste0("Other: ", work_no_reason_7_TEXT)) %>%
+  count(reason) %>%
+  mutate(type = "Other")
+
+# Combine all reasons for not working
+all_reasons_not_working <- bind_rows(not_working_standard, not_working_other) %>%
+  arrange(desc(n)) %>%
+  mutate(percentage = round(n / sum(n) * 100, 1))
+
+# Work Hours Change
+kable(work_hours_change_data, 
+      col.names = c("Work Hours Change", "Count", "Percentage (%)"),
+      caption = "Reported Changes in Work Hours at Midline")
+
+# Comprehensive Work Hours Change Reasons
+kable(all_hours_change_reasons, 
+      col.names = c("Reason Type", "Reason", "Count", "Percentage (%)"),
+      caption = "Reasons for Work Hours Changes (Including Text Responses)")
+
+# Specific Reasons for Decreased Hours
+kable(all_decrease_reasons, 
+      col.names = c("Reason", "Count", "Reason Type", "Percentage (%)"),
+      caption = "Specific Reasons for Decreased Work Hours")
+
+# Specific Reasons for Increased Hours
+kable(all_increase_reasons, 
+      col.names = c("Reason", "Count", "Reason Type", "Percentage (%)"),
+      caption = "Specific Reasons for Increased Work Hours")
+
+# Reasons for Not Working
+kable(all_reasons_not_working, 
+      col.names = c("Reason", "Count", "Type", "Percentage (%)"),
+      caption = "Comprehensive Reasons for Not Working at Midline")
+
+```
+
+## Employment and Education Relationship {.tabset}
+```{r,}
+##########################################
+## WORK-EDUCATION RELATIONSHIP ANALYSIS
+##########################################
+
+# Comprehensive work-education status analysis
+work_edu_comprehensive <- merged_data %>%
+  mutate(
+    work_status_b = case_when(
+      work_b == "Yes" ~ "Employed",
+      work_b == "No" ~ "Unemployed",
+      work_b == "Prefer not to answer" ~ "Prefer not to answer",
+      is.na(work_b) ~ "No response",
+      TRUE ~ as.character(work_b)
+    ),
+    work_status_m = case_when(
+      work_m == "Yes" ~ "Employed",
+      work_m == "No" ~ "Unemployed",
+      work_m == "Prefer not to answer" ~ "Prefer not to answer",
+      is.na(work_m) ~ "No response",
+      TRUE ~ as.character(work_m)
+    ),
+    edu_status_b = case_when(
+      edu_cert_prog_b == "Yes" ~ "Enrolled",
+      edu_cert_prog_b == "No" ~ "Not Enrolled",
+      edu_cert_prog_b == "Prefer not to answer" ~ "Prefer not to answer",
+      is.na(edu_cert_prog_b) ~ "No response",
+      TRUE ~ as.character(edu_cert_prog_b)
+    ),
+    edu_status_m = case_when(
+      edu_cert_prog_m == "Yes" ~ "Enrolled",
+      edu_cert_prog_m == "No" ~ "Not Enrolled",
+      edu_cert_prog_m == "Prefer not to answer" ~ "Prefer not to answer",
+      is.na(edu_cert_prog_m) ~ "No response",
+      TRUE ~ as.character(edu_cert_prog_m)
+    )
+  ) %>%
+  group_by(work_status_b, work_status_m, edu_status_b, edu_status_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+# Work type and education relationship across time points
+work_type_edu_comprehensive <- merged_data %>%
+  mutate(
+    edu_status_b = case_when(
+      edu_cert_prog_b == "Yes" ~ "Enrolled",
+      edu_cert_prog_b == "No" ~ "Not Enrolled",
+      edu_cert_prog_b == "Prefer not to answer" ~ "Prefer not to answer",
+      is.na(edu_cert_prog_b) ~ "No response",
+      TRUE ~ as.character(edu_cert_prog_b)
+    ),
+    edu_status_m = case_when(
+      edu_cert_prog_m == "Yes" ~ "Enrolled",
+      edu_cert_prog_m == "No" ~ "Not Enrolled",
+      edu_cert_prog_m == "Prefer not to answer" ~ "Prefer not to answer",
+      is.na(edu_cert_prog_m) ~ "No response",
+      TRUE ~ as.character(edu_cert_prog_m)
+    )
+  ) %>%
+  group_by(work_type_b, work_type_m, edu_status_b, edu_status_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+# Specific transitions of interest
+# People who changed work status possibly due to education
+work_changed_due_to_edu <- merged_data %>%
+  filter(
+    !is.na(work_b) & !is.na(work_m) & 
+    !is.na(edu_cert_prog_b) & !is.na(edu_cert_prog_m) &
+    work_b != "Prefer not to answer" & work_m != "Prefer not to answer" &
+    edu_cert_prog_b != "Prefer not to answer" & edu_cert_prog_m != "Prefer not to answer"
+  ) %>%
+  mutate(
+    work_changed = work_b != work_m,
+    edu_changed = edu_cert_prog_b != edu_cert_prog_m,
+    transition_type = case_when(
+      work_b == "Yes" & work_m == "No" & edu_cert_prog_b == "No" & edu_cert_prog_m == "Yes" ~ 
+        "Stopped working to study",
+      work_b == "No" & work_m == "Yes" & edu_cert_prog_b == "Yes" & edu_cert_prog_m == "No" ~ 
+        "Started working after completing education",
+      work_type_b == "Part-time" & work_type_m == "Full-time" & edu_cert_prog_b == "Yes" & edu_cert_prog_m == "No" ~ 
+        "Increased to full-time after completing education",
+      work_type_b == "Full-time" & work_type_m == "Part-time" & edu_cert_prog_b == "No" & edu_cert_prog_m == "Yes" ~ 
+        "Reduced to part-time to study",
+      TRUE ~ "Other/No specific transition"
+    )
+  ) %>%
+  group_by(transition_type) %>%
+  summarise(count = n()) %>%
+  filter(transition_type != "Other/No specific transition") %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+# For those not enrolled in education, analyze their work status
+not_enrolled_work_status <- merged_data %>%
+  filter(edu_cert_prog_m == "No") %>%
+  group_by(work_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+
+#Comprehensive Work-Education Status
+kable(work_edu_comprehensive, 
+      col.names = c("Baseline Employment", "Midline Employment", "Baseline Education", "Midline Education", "Count", "Percentage (%)"),
+      caption = "Comprehensive Work-Education Status Changes")
+
+# Work Type and Education Relationship
+kable(work_type_edu_comprehensive, 
+      col.names = c("Baseline Work Type", "Midline Work Type", "Baseline Education", "Midline Education", "Count", "Percentage (%)"),
+      caption = "Work Type and Education Enrollment Patterns Across Time Points")
+
+# Specific Work-Education Transitions
+kable(work_changed_due_to_edu, 
+      col.names = c("Transition Type", "Count", "Percentage (%)"),
+      caption = "Key Work-Education Transitions")
+
+# Work Status for Non-Enrolled
+kable(not_enrolled_work_status, 
+      col.names = c("Work Status", "Count", "Percentage (%)"),
+      caption = "Work Status of Those Not Enrolled in Education at Midline")
+```
+## HealthCare: Insurance {.tabset}
+```{r,healthcare}
+
+##########################################
+## INSURANCE TYPE CHANGES ANALYSIS
+##########################################
+
+# Insurance type transitions
+insurance_transitions <- merged_data %>%
+  group_by(insurance_type_b, insurance_type_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+
+# Display results
+kable(insurance_transitions, 
+      col.names = c("Baseline Insurance", "Midline Insurance", "Count", "Percentage (%)"),
+      caption = "Insurance Type Transitions")
+
+
+
+```
+## Healthcare: Doctors {.tabset}
+```{r,}
+#########################################
+## DOCTOR PRESENCE ANALYSIS
+##########################################
+
+# Doctor presence transitions 
+doctor_transitions <- merged_data %>%
+  group_by(doctor_who_b, doctor_who_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+# Baseline and midline doctor presence summaries
+doctor_baseline <- merged_data %>%
+  group_by(doctor_who_b) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+doctor_midline <- merged_data %>%
+  group_by(doctor_who_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / sum(count) * 100, 1))
+
+# Display results
+kable(doctor_transitions, 
+      col.names = c("Baseline Doctor", "Midline Doctor", "Count", "Percentage (%)"), 
+      caption = "Doctor Presence Transitions")
+
+kable(doctor_baseline, 
+      col.names = c("Baseline Doctor Status", "Count", "Percentage (%)"), 
+      caption = "Doctor Presence at Baseline")
+
+kable(doctor_midline, 
+      col.names = c("Midline Doctor Status", "Count", "Percentage (%)"), 
+      caption = "Doctor Presence at Midline")
+
+# Create simplified doctor presence transitions with combined "Yes" category
+doctor_simplified <- merged_data %>%
+  # Create new simplified categories
+  mutate(
+    doctor_b_simple = case_when(
+      doctor_who_b %in% c("Yes, only one", "More than one") ~ "Yes",
+      is.na(doctor_who_b) ~ "NA",
+      TRUE ~ doctor_who_b
+    ),
+    doctor_m_simple = case_when(
+      doctor_who_m %in% c("Yes, only one", "More than one") ~ "Yes",
+      is.na(doctor_who_m) ~ "NA",
+      TRUE ~ doctor_who_m
+    )
+  ) %>%
+  # Group by simplified categories
+  group_by(doctor_b_simple, doctor_m_simple) %>%
+  # Count transitions
+  summarise(count = n(), .groups = "drop") %>%
+  # Calculate percentage based on total respondents
+  mutate(percentage = round(count / sum(count) * 100, 1)) %>%
+  # Order the results logically
+  arrange(match(doctor_b_simple, c("Yes", "No", "I don't know/not sure", "NA")),
+          match(doctor_m_simple, c("Yes", "No", "I don't know/not sure", "NA")))
+
+# Display simplified transitions
+kable(doctor_simplified, 
+      col.names = c("Baseline Doctor (Simplified)", "Midline Doctor (Simplified)", "Count", "Percentage (%)"), 
+      caption = "Doctor Presence Transitions - Simplified Categories")
+
+##########################################
+## LAST DOCTOR VISIT ANALYSIS
+##########################################
+
+# Last doctor visit transitions
+visit_transitions <- merged_data %>%
+  group_by(doctor_how_long_b, doctor_how_long_m) %>%
+  summarise(count = n()) %>%
+  mutate(percentage = round(count / n_respondents * 100, 1))
+
+# Display results
+kable(visit_transitions, 
+      col.names = c("Baseline Last Visit", "Midline Last Visit", "Count", "Percentage (%)"), 
+      caption = "Last Doctor Visit Transitions")
+
+# Create a table comparing doctor visit recency between baseline and midline with correct categories
+doctor_visit_recency <- merged_data %>%
+  # Select the relevant columns
+  select(entity_uuid, doctor_how_long_b, doctor_how_long_m) %>%
+  # Count the frequency of each visit time at baseline
+  group_by(last_visit_time = doctor_how_long_b) %>%
+  summarise(baseline_count = n()) %>%
+  # Calculate baseline percentages
+  mutate(baseline_percent = round(baseline_count / sum(baseline_count) * 100, 1)) %>%
+  # Now join with midline data
+  full_join(
+    merged_data %>%
+      group_by(last_visit_time = doctor_how_long_m) %>%
+      summarise(midline_count = n()) %>%
+      mutate(midline_percent = round(midline_count / sum(midline_count) * 100, 1)),
+    by = "last_visit_time"
+  ) %>%
+  # Replace NAs with 0 for counts and percentages
+  mutate(
+    baseline_count = ifelse(is.na(baseline_count), 0, baseline_count),
+    baseline_percent = ifelse(is.na(baseline_percent), 0, baseline_percent),
+    midline_count = ifelse(is.na(midline_count), 0, midline_count),
+    midline_percent = ifelse(is.na(midline_percent), 0, midline_percent)
+  )
+
+# Create a manual ordering
+time_order <- c(
+  "Less than 1 year", 
+  "1-2 years", 
+  "3-5 years", 
+  "5 or more years ago",
+  "Never", 
+  "I don't know/not sure"
+)
+
+# Create a new data frame with all expected categories
+doctor_visit_complete <- data.frame(
+  last_visit_time = time_order
+) %>%
+  left_join(doctor_visit_recency, by = "last_visit_time") %>%
+  # Replace NAs with 0
+  mutate(
+    baseline_count = ifelse(is.na(baseline_count), 0, baseline_count),
+    baseline_percent = ifelse(is.na(baseline_percent), 0, baseline_percent),
+    midline_count = ifelse(is.na(midline_count), 0, midline_count),
+    midline_percent = ifelse(is.na(midline_percent), 0, midline_percent)
+  )
+
+# Display the table
+kable(doctor_visit_complete,
+      col.names = c(
+        "Last Visit Time", 
+        "Baseline Count", 
+        "Baseline %", 
+        "Midline Count", 
+        "Midline %"
+      ),
+      caption = "Doctor Visit Recency Comparison Between Baseline and Midline")
+```
+## Impact Fund {.tabset}
+```{r,impact}
+#impact fund usage
+
+# Create a function to handle multiple responses with text within parentheses
+# This function properly handles cases like "Housing expenses (e.g., rent or mortgage, utilities)"
+parse_fund_uses <- function(data) {
+  # List of standard fund use categories to look for
+  standard_categories <- c(
+    "Housing expenses",
+    "Daily living needs",
+    "Transportation",
+    "Education and/or professional development",
+    "Debt and financial management",
+    "Family caregiving",
+    "Leisure and Personal Well-being",
+    "Supporting others",
+    "Other"
+  )
+  
+  # Initialize counts
+  category_counts <- rep(0, length(standard_categories))
+  names(category_counts) <- standard_categories
+  
+  # Count respondents for each category
+  for (i in 1:nrow(data)) {
+    if (!is.na(data$impact_fund_receive[i]) && data$impact_fund_receive[i] != "NA") {
+      for (j in 1:length(standard_categories)) {
+        if (grepl(standard_categories[j], data$impact_fund_receive[i], fixed = TRUE)) {
+          category_counts[j] <- category_counts[j] + 1
+        }
+      }
+    }
+  }
+  
+  # Create data frame with results
+  result_df <- data.frame(
+    Category = names(category_counts),
+    Count = category_counts
+  ) %>%
+    arrange(desc(Count))
+  
+  return(result_df)
+}
+
+# Count respondents who provided information about fund use
+fund_use_count <- merged_data %>%
+  filter(impact_fund_receive != "NA", !is.na(impact_fund_receive)) %>%
+  nrow()
+
+# Parse fund uses
+fund_uses <- parse_fund_uses(merged_data)
+
+# Calculate percentages
+fund_uses <- fund_uses %>%
+  mutate(Percentage = round(Count / fund_use_count * 100, 1))
+
+# Get "Other" fund uses with their text explanations
+other_fund_uses <- merged_data %>%
+  filter(grepl("Other", impact_fund_receive, fixed = TRUE),
+         impact_fund_receive_9_TEXT != "NA", 
+         !is.na(impact_fund_receive_9_TEXT)) %>%
+  select(impact_fund_receive_9_TEXT)
+
+# Impact Funds
+cat("\n\n### Impact Fund Usage by Category:\n")
+knitr::kable(fund_uses, 
+             caption = "Impact Fund Usage by Category",
+             digits = 1)
+
+# Print summary
+cat("\n\n### Summary of Impact Fund Usage:\n")
+cat("- All respondents (", fund_use_count, ") provided information about how they used their impact funds\n", sep="")
+cat("- The most common uses were for essential needs:\n")
+cat("  * ", fund_uses$Percentage[1], "% used funds for ", fund_uses$Category[1], "\n", sep="")
+cat("  * ", fund_uses$Percentage[2], "% used funds for ", fund_uses$Category[2], "\n", sep="")
+cat("  * ", fund_uses$Percentage[3], "% used funds for ", fund_uses$Category[3], "\n", sep="")
+cat("- Financial management was also important, with ", 
+    fund_uses$Percentage[fund_uses$Category == "Debt and financial management"], 
+    "% using funds for debt repayment, savings, or investments\n", sep="")
+cat("- Some respondents also reported using funds for more forward-looking investments:\n")
+cat("  * ", fund_uses$Percentage[fund_uses$Category == "Education and/or professional development"], 
+    "% for education or professional development\n", sep="")
+cat("  * Other specific uses included saving for a car and startup costs\n")
+
+```
+## Housing {.tabset}
+```{r,}
+# Analyze housing situation
+housing_situation_data <- merged_data %>%
+  filter(housing_situation != "NA", !is.na(housing_situation)) %>%
+  # Create a new column with the recategorized housing types
+  mutate(housing_category = case_when(
+    housing_situation %in% c("No fixed residence (e.g., homeless, other places not made for housing)", 
+                            "Temporary housing (e.g., shelter, transitional housing)") ~ "Homeless/Temporary",
+    housing_situation == "Rented" ~ "Rented",
+    housing_situation %in% c("Owned by you or someone in this household with a mortgage or loan (including home equity loans)",
+                           "Owned by you or someone in this household (no mortgage or loan)") ~ "Owned",
+    TRUE ~ "Other"
+  )) %>%
+  count(housing_category) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%
+  arrange(desc(n))
+
+# Check for "Other" reasons and get the text explanations
+other_housing_situations <- merged_data %>%
+  filter(housing_situation == "Other (please specify)", 
+         housing_situation_7_TEXT != "NA", 
+         !is.na(housing_situation_7_TEXT)) %>%
+  select(housing_situation_7_TEXT)
+
+# Original housing situation distribution (before recategorization)
+original_housing_data <- merged_data %>%
+  filter(housing_situation != "NA", !is.na(housing_situation)) %>%
+  count(housing_situation) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+
+# visualization of the housing situations
+ggplot(housing_situation_data, aes(x = reorder(housing_category, -n), y = proportion)) +
+  geom_bar(stat = "identity", fill = "#46214a") +
+  geom_text(aes(label = paste0(round(proportion), "%")),  # Keep whole numbers for visualization
+            color = "black", 
+            vjust = -0.5,
+            size = 4) +
+  theme_minimal(base_family = "Arial", base_size = 14) +
+  theme(
+    text = element_text(family = "Arial"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(size = 12, lineheight = 0.8),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 14, margin = margin(t = 10)),
+    axis.title.y = element_text(size = 14, margin = margin(r = 10)),
+    plot.title = element_text(size = 16, face = "bold", margin = margin(b = 10)),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  labs(
+    title = "Housing Situation Categories",
+    x = "Housing Category",
+    y = "Percentage of Respondents"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), 
+                    limits = function(x) c(0, max(x) * 1.2))
+```
+## Housing shared arrangements {.tabset}
+```{r}
+# Analyze housing shared arrangements
+housing_shared_data <- merged_data %>%
+  filter(housing_shared != "NA", !is.na(housing_shared)) %>%
+  count(housing_shared) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+
+# Check for "Other" shared arrangements and get the text explanations
+other_housing_shared <- merged_data %>%
+  filter(housing_shared == "Other, please specify", 
+         housing_shared_3_TEXT != "NA", 
+         !is.na(housing_shared_3_TEXT)) %>%
+  select(housing_shared_3_TEXT)
+
+# Categorize the "Other" shared arrangements for better analysis
+other_housing_shared_categorized <- merged_data %>%
+  filter(housing_shared == "Other, please specify", 
+         housing_shared_3_TEXT != "NA", 
+         !is.na(housing_shared_3_TEXT)) %>%
+  mutate(shared_category = case_when(
+    grepl("rent.*by me|rent my own|i rent|rented by myself|i live by myself|i live in my own|rented by me|corporate owned", 
+          tolower(housing_shared_3_TEXT)) ~ "I rent/own independently",
+    grepl("partner|parents|family|guardian", 
+          tolower(housing_shared_3_TEXT)) ~ "Live with family/partner",
+    grepl("program|bridges|group home", 
+          tolower(housing_shared_3_TEXT)) ~ "Housing program/Group home",
+    TRUE ~ "Other"
+  )) %>%
+  count(shared_category) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1))
+
+# Combine housing shared data - standard categories and recategorized "Other" entries
+standard_shared <- merged_data %>%
+  filter(housing_shared != "NA", 
+         housing_shared != "Other, please specify", 
+         !is.na(housing_shared)) %>%
+  count(shared_category = housing_shared) %>%
+  mutate(type = "Standard")
+
+# Add the recategorized "Other" shared arrangements
+other_shared_recategorized <- other_housing_shared_categorized %>%
+  rename(shared_category = shared_category, n = n) %>%
+  select(shared_category, n) %>%
+  mutate(type = "Other (recategorized)")
+
+# Combine all shared housing data
+all_shared_housing <- bind_rows(standard_shared, other_shared_recategorized) %>%
+  arrange(desc(n)) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) 
+
+# What is your shared housing arrangement?
+cat("\n\n### Housing shared arrangements:\n")
+knitr::kable(housing_shared_data, 
+             caption = "Housing Shared Arrangements",
+             digits = 1)
+
+# Print the categorized "Other" shared arrangements
+cat("\n\n### Categorized 'Other' housing shared arrangements:\n")
+knitr::kable(other_housing_shared_categorized, 
+             caption = "Categorized Other Housing Shared Arrangements",
+             digits = 1)
+
+# Print the comprehensive table for all types of shared housing
+cat("\n\n### Combined housing shared arrangements analysis:\n")
+knitr::kable(all_shared_housing, 
+             caption = "Combined Housing Shared Arrangements Analysis",
+             digits = 1)
+```
+## Housing:Moves {.tabset}
+```{r}
+# Analyze whether respondents moved in the last year
+moved_last_year_data <- merged_data %>%
+  filter(moved_last_year != "NA", !is.na(moved_last_year)) %>%
+  count(moved_last_year) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+
+# For those who moved, analyze how many times they moved
+moved_last_year_num_data <- merged_data %>%
+  filter(moved_last_year == "Yes", 
+         moved_last_year_num != "NA", 
+         !is.na(moved_last_year_num)) %>%
+  count(moved_last_year_num) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+
+# Analyze the type of move (positive, neutral, or negative)
+move_reason_data <- merged_data %>%
+  filter(move_reason != "NA", !is.na(move_reason)) %>%
+  count(move_reason) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+
+# Function to analyze move reasons (either positive or negative)
+analyze_move_reasons <- function(data, reason_column, text_column, reason_type) {
+  # Standard reasons (excluding "Other")
+  standard_reasons <- data %>%
+    filter(
+      moved_last_year == "Yes",
+      !is.na(get(reason_column)), 
+      get(reason_column) != "NA"
+    ) %>%
+    filter(!grepl("Other \\(please specify\\)", get(reason_column)))
+  
+  # Count each standard reason separately (handling multiple responses)
+  standard_reasons_list <- c()
+  
+  for (i in 1:nrow(standard_reasons)) {
+    reasons <- unlist(strsplit(as.character(standard_reasons[[reason_column]][i]), ","))
+    reasons <- trimws(reasons)
+    standard_reasons_list <- c(standard_reasons_list, reasons)
+  }
+  
+  standard_reasons_count <- as.data.frame(table(standard_reasons_list))
+  colnames(standard_reasons_count) <- c("reason", "n")
+  standard_reasons_count$type <- "Standard"
+  standard_reasons_count$reason_type <- reason_type
+  
+  # "Other" reasons with their specific text
+  other_reasons <- data %>%
+    filter(
+      moved_last_year == "Yes",
+      !is.na(get(reason_column)), 
+      get(reason_column) != "NA",
+      grepl("Other \\(please specify\\)", get(reason_column)),
+      !is.na(get(text_column)), 
+      get(text_column) != "NA"
+    ) %>%
+    mutate(reason = paste0("Other: ", get(text_column))) %>%
+    count(reason) %>%
+    mutate(type = "Other",
+           reason_type = reason_type)
+  
+  # Combine and return
+  bind_rows(standard_reasons_count, other_reasons)
+}
+
+# Analyze positive move reasons
+positive_reasons <- analyze_move_reasons(
+  merged_data, 
+  "move_reason_positive", 
+  "move_reason_positive_12_TEXT", 
+  "Positive"
+)
+
+# Analyze negative move reasons
+negative_reasons <- analyze_move_reasons(
+  merged_data, 
+  "move_reason_negative", 
+  "move_reason_negative_4_TEXT", 
+  "Negative"
+)
+
+# Combine positive and negative reasons
+all_move_reasons <- bind_rows(positive_reasons, negative_reasons) %>%
+  arrange(desc(reason_type), desc(n))
+
+# Calculate total respondents who reported move reasons
+total_movers_with_reasons <- merged_data %>%
+  filter(
+    moved_last_year == "Yes",
+    (!is.na(move_reason_positive) & move_reason_positive != "NA") |
+    (!is.na(move_reason_negative) & move_reason_negative != "NA")
+  ) %>%
+  nrow()
+
+# Add proportion column with proper rounding
+all_move_reasons <- all_move_reasons %>%
+  mutate(proportion = round(n / total_movers_with_reasons * 100, 1))
+
+# Fix the "Moved to a better home" issue - the reason appears split due to commas in parentheses
+all_move_reasons_fixed <- all_move_reasons %>%
+  filter(!reason %in% c("more space", "newer construction", "etc.)")) %>%
+  mutate(reason = ifelse(reason == "Moved to a better home (e.g.", 
+                        "Moved to a better home (e.g., more space, newer construction, etc.)", 
+                        reason))
+# Did you move in the last year?
+cat("\n\n### Moved in the last year:\n")
+knitr::kable(moved_last_year_data, 
+             caption = "Moved in the Last Year",
+             digits = 1)
+
+# How many times did you move in the last year?
+cat("\n\n### Number of times moved in the last year (for those who moved):\n")
+knitr::kable(moved_last_year_num_data, 
+             caption = "Number of Times Moved in the Last Year",
+             digits = 1)
+
+# what kind of a move was it?
+cat("\n\n### Type of move (reason):\n")
+knitr::kable(move_reason_data, 
+             caption = "Type of Move (Reason)",
+             digits = 1)
+
+# All reasons for moving in the past year
+cat("\n\n### Fixed move reasons (consolidated split entries):\n")
+knitr::kable(all_move_reasons_fixed, 
+             caption = "Fixed Move Reasons",
+             digits = 1)
+```
+## Housing: Burden and payment status {.tabset}
+```{r}
+# Analyze housing burden (percentage of income spent on housing)
+housing_burden_data <- merged_data %>%
+  filter(housing_burden != "NA", !is.na(housing_burden)) %>%
+  count(housing_burden) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>% 
+  arrange(desc(n))
+
+# Analyze whether respondents are behind on housing payments
+housing_behind_data <- merged_data %>%
+  filter(housing_behind != "NA", !is.na(housing_behind)) %>%
+  count(housing_behind) %>%
+  mutate(proportion = round(n / sum(n) * 100, 1)) %>%
+  arrange(desc(n))
+
+# Create a cross-tabulation of housing burden and payment status
+housing_cross_tab <- merged_data %>%
+  filter(housing_burden != "NA", !is.na(housing_burden),
+         housing_behind != "NA", !is.na(housing_behind)) %>%
+  count(housing_burden, housing_behind) %>%
+  spread(housing_behind, n) %>%
+  mutate(Total = Yes + No,
+         Percent_Behind = round(Yes / Total * 100, 1))
+
+# Calculate overall percentage of respondents behind on payments
+overall_behind_percent <- housing_behind_data %>%
+  filter(housing_behind == "Yes") %>%
+  pull(proportion)
+
+# Analyze the relationship between housing burden and payment status
+burden_categories <- c("Less than 30% of monthly income", 
+                      "30% to 50% of monthly income", 
+                      "More than 50% of monthly income")
+
+housing_relationship <- merged_data %>%
+  filter(housing_burden != "NA", !is.na(housing_burden),
+         housing_behind != "NA", !is.na(housing_behind)) %>%
+  mutate(housing_burden = factor(housing_burden, levels = burden_categories)) %>%
+  group_by(housing_burden) %>%
+  summarize(
+    Total = n(),
+    Behind_Count = sum(housing_behind == "Yes"),
+    Behind_Percent = round(sum(housing_behind == "Yes") / n() * 100, 1)
+  ) %>%
+  arrange(housing_burden)
+
+# Print the housing burden results
+cat("\n\n### Housing Burden (percentage of income spent on housing):\n")
+knitr::kable(housing_burden_data, 
+             caption = "Housing Burden",
+             digits = 1)
+
+# Print the housing payment status results
+cat("\n\n### Behind on Housing Payments:\n")
+knitr::kable(housing_behind_data, 
+             caption = "Behind on Housing Payments",
+             digits = 1)
+
+# Print the cross-tabulation
+cat("\n\n### Cross-tabulation of Housing Burden and Payment Status:\n")
+knitr::kable(housing_cross_tab, 
+             caption = "Cross-tabulation of Housing Burden and Payment Status",
+             digits = 1)
+
+cat(paste0("\n\nOverall percentage of respondents behind on housing payments: ", overall_behind_percent, "%"))
+
+# Print the relationship analysis
+cat("\n\n### Relationship between Housing Burden and Payment Status:\n")
+knitr::kable(housing_relationship, 
+             caption = "Relationship Between Housing Burden and Payment Status",
+             digits = 1)
+
+# Summary statistics 
+cat("\n\n### Summary of Housing Affordability Issues:\n")
+cat(paste0(
+  "- ", sum(housing_burden_data$n), " respondents provided housing burden information\n",
+  "- ", sum(housing_burden_data$n[housing_burden_data$housing_burden %in% c("30% to 50% of monthly income", "More than 50% of monthly income")]), 
+  " respondents (", 
+  round(sum(housing_burden_data$proportion[housing_burden_data$housing_burden %in% c("30% to 50% of monthly income", "More than 50% of monthly income")]), 1), 
+  "%) are housing cost burdened (spending 30% or more of income on housing)\n",
+  "- ", sum(housing_burden_data$n[housing_burden_data$housing_burden == "More than 50% of monthly income"]), 
+  " respondents (", 
+  round(housing_burden_data$proportion[housing_burden_data$housing_burden == "More than 50% of monthly income"], 1), 
+  "%) are severely housing cost burdened (spending more than 50% of income on housing)\n",
+  "- ", sum(housing_behind_data$n[housing_behind_data$housing_behind == "Yes"]), 
+  " respondents (", 
+  round(housing_behind_data$proportion[housing_behind_data$housing_behind == "Yes"], 1), 
+  "%) reported being behind on housing payments\n"
+))
+```

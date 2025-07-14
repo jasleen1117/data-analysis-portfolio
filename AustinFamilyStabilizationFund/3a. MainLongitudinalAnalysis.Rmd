@@ -1,0 +1,3073 @@
+---
+title: "Basleine_Midline_Endline_SurveyAnalysis"
+author: "Jasleen"
+date: "2025-06-20"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: united
+    highlight: tango
+    code_folding: hide
+    fig_caption: true
+    df_print: paged
+  pdf_document:
+    toc: true
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,          # Don't show code
+  message = FALSE,       # Don't show messages
+  warning = FALSE,       # Don't show warnings
+  fig.align = "center",  # Center figures
+  out.width = "80%",     # Control figure width
+  fig.width = 10,        # Set figure width
+  fig.height = 6         # Set figure height
+)
+```
+
+```{r, read}
+# Load required libraries
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(knitr)
+library(tidyverse)
+```
+
+```{r,}
+# Read the merged dataset
+merged_data <- read_csv("merged_b_m_e.csv")
+
+# Quick overview
+cat("Rows:", nrow(merged_data), "| Columns:", ncol(merged_data), "\n")
+table(merged_data$participation_pattern)
+
+# Set default theme 
+theme_larger_text <- theme_minimal() +
+  theme(
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12),
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12),
+    strip.text = element_text(size = 12, face = "bold")
+  )
+
+theme_set(theme_larger_text)
+```
+
+## Community {.tabset}
+```{r, comm-1}
+# Community participation - analyzing each activity type separately
+library(knitr)
+
+# Function to check if an activity type is mentioned in responses
+check_activity <- function(responses, activity_pattern) {
+  ifelse(is.na(responses), NA, grepl(activity_pattern, responses, ignore.case = TRUE))
+}
+
+# Define activity categories
+activities <- c(
+  "Civic Activities",
+  "Community Betterment", 
+  "Religious Activities",
+  "Recreational Groups",
+  "Educational Involvement",
+  "Cultural Activities",
+  "Health and Wellbeing Activities",
+  "Neighborhood Groups",
+  "Local Business Support",
+  "Other",
+  "I have not participated"
+)
+
+# Analyze each activity across all three waves
+results <- data.frame(Activity = activities)
+
+for(activity in activities) {
+  # Baseline
+  baseline_total <- sum(merged_data$participated_baseline, na.rm = TRUE)
+  baseline_activity <- sum(check_activity(merged_data$comm_part_b, activity), na.rm = TRUE)
+  baseline_pct <- round(baseline_activity/baseline_total * 100, 0)
+  
+  # Midline  
+  midline_total <- sum(merged_data$participated_midline, na.rm = TRUE)
+  midline_activity <- sum(check_activity(merged_data$comm_part_m, activity), na.rm = TRUE)
+  midline_pct <- round(midline_activity/midline_total * 100, 0)
+  
+  # Endline
+  endline_total <- sum(merged_data$participated_endline, na.rm = TRUE)
+  endline_activity <- sum(check_activity(merged_data$comm_part_e, activity), na.rm = TRUE)
+  endline_pct <- round(endline_activity/endline_total * 100, 0)
+  
+  # Add to results
+  results[results$Activity == activity, "Baseline_pct"] <- baseline_pct
+  results[results$Activity == activity, "Midline_pct"] <- midline_pct
+  results[results$Activity == activity, "Endline_pct"] <- endline_pct
+}
+
+cat("=== COMMUNITY PARTICIPATION BY ACTIVITY TYPE ===\n")
+kable(results, 
+      col.names = c("Activity Type", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+#visualization
+# Define consistent color palette and theme
+brand_colors <- c("#46214A", "#D70073", "#5E2D91", "#FF8C00")
+
+
+# Reshape data for plotting
+plot_data <- results %>%
+  pivot_longer(cols = c(Baseline_pct, Midline_pct, Endline_pct),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "Baseline_pct" ~ "Baseline",
+    Wave == "Midline_pct" ~ "Midline", 
+    Wave == "Endline_pct" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline")))
+
+# Create simple bar chart
+ggplot(plot_data, aes(x = Activity, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Baseline" = "#46214A", "Midline" = "#D70073", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Community Participation Across Waves",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  ylim(0, max(plot_data$Percentage, na.rm = TRUE) * 1.1)
+```
+
+```{r, comm-2}
+# Community participation frequency - midline and endline comparison (baseline skipped - variable not available)
+cat("=== FREQUENCY ANALYSIS: MIDLINE VS ENDLINE ONLY ===\n")
+
+# Calculate percentages for midline and endline only
+midline_freq <- merged_data %>%
+  filter(participated_midline == TRUE) %>%
+  count(comm_part_time_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = comm_part_time_m, count_midline = n, pct_midline = percentage) %>%
+  filter(!grepl("participated in any activity", response, ignore.case = TRUE)) 
+
+endline_freq <- merged_data %>%
+  filter(participated_endline == TRUE) %>%
+  count(comm_part_time_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = comm_part_time_e, count_endline = n, pct_endline = percentage) %>%
+  filter(!grepl("participated in any activity", response, ignore.case = TRUE)) 
+# Create comparison table
+frequency_comparison <- full_join(midline_freq, endline_freq, by = "response") %>%
+  select(response, pct_midline, pct_endline)
+
+cat("=== COMMUNITY PARTICIPATION FREQUENCY COMPARISON ===\n")
+kable(frequency_comparison, 
+      col.names = c("Participation Frequency", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+
+# Reshape data for plotting
+plot_data_freq <- frequency_comparison %>%
+  pivot_longer(cols = c(pct_midline, pct_endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "pct_midline" ~ "Midline", 
+    Wave == "pct_endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Midline", "Endline"))) %>%
+  filter(!is.na(Percentage)) %>%
+  # Clean up response labels for the graph
+  mutate(response_clean = case_when(
+    grepl("Very frequently", response, ignore.case = TRUE) ~ "Very frequently",
+    grepl("Frequently", response, ignore.case = TRUE) ~ "Frequently", 
+    grepl("Occasionally", response, ignore.case = TRUE) ~ "Occasionally",
+    grepl("Sometimes", response, ignore.case = TRUE) ~ "Sometimes",
+    grepl("Rarely", response, ignore.case = TRUE) ~ "Rarely",
+    grepl("Never", response, ignore.case = TRUE) ~ "Never",
+    TRUE ~ response
+  ))
+
+# Create bar chart
+ggplot(plot_data_freq, aes(x = response_clean, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Midline" = "#D70073", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Community Participation Frequency: Midline vs Endline",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  ylim(0, max(plot_data_freq$Percentage, na.rm = TRUE) * 1.1)
+```
+
+```{r,comm-3}
+# Community support giving analysis - baseline, midline, endline comparison
+#THIS IS JUST IF THEY GIVE SUPPORT OFTEN OR SOMETIMES.
+# Define support types
+support_types <- c(
+  "Emotional Support" = "comm_give_emo_supp",
+  "Financial Support" = "comm_give_money", 
+  "Caregiving Support" = "comm_give_caregiving",
+  "Knowledge Sharing" = "comm_give_knowledge",
+  "Transportation Support" = "comm_give_transport",
+  "Errands Support" = "comm_give_errands",
+  "Food Support" = "comm_give_food"
+)
+
+# Create results dataframe
+results_support <- data.frame(Support_Type = names(support_types))
+
+# Analyze each support type across all three waves
+for(support_name in names(support_types)) {
+  support_var <- support_types[[support_name]]
+  
+  # Baseline
+  baseline_var <- paste0(support_var, "_b")
+  baseline_total <- sum(merged_data$participated_baseline, na.rm = TRUE)
+  baseline_often_sometimes <- sum(merged_data[[baseline_var]] %in% c("Often", "Sometimes"), na.rm = TRUE)
+  baseline_pct <- round(baseline_often_sometimes/baseline_total * 100, 0)
+  
+  # Midline  
+  midline_var <- paste0(support_var, "_m")
+  midline_total <- sum(merged_data$participated_midline, na.rm = TRUE)
+  midline_often_sometimes <- sum(merged_data[[midline_var]] %in% c("Often", "Sometimes"), na.rm = TRUE)
+  midline_pct <- round(midline_often_sometimes/midline_total * 100, 0)
+  
+  # Endline
+  endline_var <- paste0(support_var, "_e")
+  endline_total <- sum(merged_data$participated_endline, na.rm = TRUE)
+  endline_often_sometimes <- sum(merged_data[[endline_var]] %in% c("Often", "Sometimes"), na.rm = TRUE)
+  endline_pct <- round(endline_often_sometimes/endline_total * 100, 0)
+  
+  # Add to results
+  results_support[results_support$Support_Type == support_name, "Baseline_pct"] <- baseline_pct
+  results_support[results_support$Support_Type == support_name, "Midline_pct"] <- midline_pct
+  results_support[results_support$Support_Type == support_name, "Endline_pct"] <- endline_pct
+}
+
+cat("=== COMMUNITY SUPPORT GIVING (% PROVIDING OFTEN/SOMETIMES) ===\n")
+kable(results_support, 
+      col.names = c("Type of Support", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# Reshape data for plotting
+plot_data_support <- results_support %>%
+  pivot_longer(cols = c(Baseline_pct, Midline_pct, Endline_pct),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "Baseline_pct" ~ "Baseline",
+    Wave == "Midline_pct" ~ "Midline", 
+    Wave == "Endline_pct" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline"))) %>%
+  # Clean up support type names for better display
+  mutate(Support_Clean = gsub(" Support", "", Support_Type)) %>%
+  mutate(Support_Clean = gsub(" Sharing", "", Support_Clean))
+
+# Create bar chart
+ggplot(plot_data_support, aes(x = Support_Clean, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Baseline" = "#46214A", "Midline" = "#D70073", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Community Support Giving Across Waves (Often/Sometimes)",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  ylim(0, max(plot_data_support$Percentage, na.rm = TRUE) * 1.1)
+```
+
+```{r, comm-4}
+# Community relationship strength - baseline, midline, endline comparison
+# Calculate percentages for each wave
+baseline_relationships <- merged_data %>% 
+  filter(participated_baseline == TRUE) %>%
+  count(comm_relationships_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = comm_relationships_b, count_baseline = n, pct_baseline = percentage)
+
+midline_relationships <- merged_data %>%
+  filter(participated_midline == TRUE) %>%
+  count(comm_relationships_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = comm_relationships_m, count_midline = n, pct_midline = percentage)
+
+endline_relationships <- merged_data %>%
+  filter(participated_endline == TRUE) %>%
+  count(comm_relationships_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = comm_relationships_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+relationships_comparison <- full_join(baseline_relationships, midline_relationships, by = "response") %>%
+  full_join(endline_relationships, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("=== COMMUNITY RELATIONSHIP STRENGTH COMPARISON ===\n")
+kable(relationships_comparison, 
+      col.names = c("Relationship Strength", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+
+# Reshape data for plotting
+plot_data_relationships <- relationships_comparison %>%
+  pivot_longer(cols = c(pct_baseline, pct_midline, pct_endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "pct_baseline" ~ "Baseline",
+    Wave == "pct_midline" ~ "Midline", 
+    Wave == "pct_endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline"))) %>%
+  filter(!is.na(Percentage)) %>%
+  # Clean up response labels 
+  mutate(response_clean = case_when(
+    grepl("strong and supportive", response, ignore.case = TRUE) ~ "Strong & Supportive",
+    grepl("somewhat supportive", response, ignore.case = TRUE) ~ "Somewhat Supportive",
+    grepl("neutral", response, ignore.case = TRUE) ~ "Neutral",
+    grepl("not very supportive", response, ignore.case = TRUE) ~ "Not Very Supportive",
+    grepl("not supportive", response, ignore.case = TRUE) ~ "Not Supportive",
+    TRUE ~ response
+  ))
+
+# Create bar chart
+ggplot(plot_data_relationships, aes(x = response_clean, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Baseline" = "#46214A", "Midline" = "#D70073", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Community Relationship Strength Across Waves",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  ylim(0, max(plot_data_relationships$Percentage, na.rm = TRUE) * 1.1)
+```
+
+```{r, comm-5}
+# Function to check if an activity type is mentioned in responses
+check_activity <- function(responses, activity_pattern) {
+  ifelse(is.na(responses), NA, grepl(activity_pattern, responses, ignore.case = TRUE))
+}
+
+# Some priority activities
+priority_activities <- c(
+  "Civic Activities",
+  "Community Betterment", 
+  "Cultural Activities"
+)
+
+# === PART 1: PARTICIPATION RATES FOR PRIORITY ACTIVITIES ===
+results_priority <- data.frame(Activity = priority_activities)
+
+for(activity in priority_activities) {
+  # Baseline
+  baseline_total <- sum(merged_data$participated_baseline, na.rm = TRUE)
+  baseline_activity <- sum(check_activity(merged_data$comm_part_b, activity), na.rm = TRUE)
+  baseline_pct <- round(baseline_activity/baseline_total * 100, 0)
+  
+  # Midline  
+  midline_total <- sum(merged_data$participated_midline, na.rm = TRUE)
+  midline_activity <- sum(check_activity(merged_data$comm_part_m, activity), na.rm = TRUE)
+  midline_pct <- round(midline_activity/midline_total * 100, 0)
+  
+  # Endline
+  endline_total <- sum(merged_data$participated_endline, na.rm = TRUE)
+  endline_activity <- sum(check_activity(merged_data$comm_part_e, activity), na.rm = TRUE)
+  endline_pct <- round(endline_activity/endline_total * 100, 0)
+  
+  # Add to results
+  results_priority[results_priority$Activity == activity, "Baseline_pct"] <- baseline_pct
+  results_priority[results_priority$Activity == activity, "Midline_pct"] <- midline_pct
+  results_priority[results_priority$Activity == activity, "Endline_pct"] <- endline_pct
+}
+
+cat("=== PRIORITY ACTIVITIES PARTICIPATION ===\n")
+kable(results_priority, 
+      col.names = c("Activity Type", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# === PART 2: ENGAGEMENT DEPTH FOR PARTICIPANTS IN PRIORITY ACTIVITIES ===
+cat("\n=== ENGAGEMENT DEPTH ANALYSIS (FREQUENCY COMPARISON) ===\n")
+
+# Function to create frequency comparison table for each activity
+create_frequency_comparison <- function(activity_name) {
+  cat(paste("\n=== ", activity_name, " - Frequency Across Waves ===\n"))
+  
+  # Midline frequency for this activity participants
+  midline_freq <- merged_data %>%
+    filter(participated_midline == TRUE & 
+           check_activity(comm_part_m, activity_name)) %>%
+    count(comm_part_time_m) %>%
+    mutate(percentage = round(n/sum(n)*100, 0)) %>%
+    filter(!grepl("participated in any activity", comm_part_time_m, ignore.case = TRUE)) %>%
+    rename(response = comm_part_time_m, midline_pct = percentage) %>%
+    select(response, midline_pct)
+  
+  # Endline frequency for this activity participants  
+  endline_freq <- merged_data %>%
+    filter(participated_endline == TRUE & 
+           check_activity(comm_part_e, activity_name)) %>%
+    count(comm_part_time_e) %>%
+    mutate(percentage = round(n/sum(n)*100, 0)) %>%
+    filter(!grepl("participated in any activity", comm_part_time_e, ignore.case = TRUE)) %>%
+    rename(response = comm_part_time_e, endline_pct = percentage) %>%
+    select(response, endline_pct)
+  
+  # Combine midline and endline
+  frequency_comparison <- full_join(midline_freq, endline_freq, by = "response") %>%
+    select(response, midline_pct, endline_pct)
+  
+  # Clean up response labels
+  frequency_comparison <- frequency_comparison %>%
+    mutate(response_clean = case_when(
+      grepl("Very frequently", response, ignore.case = TRUE) ~ "Very frequently",
+      grepl("Frequently", response, ignore.case = TRUE) ~ "Frequently", 
+      grepl("Occasionally", response, ignore.case = TRUE) ~ "Occasionally",
+      grepl("Rarely", response, ignore.case = TRUE) ~ "Rarely",
+      grepl("Never", response, ignore.case = TRUE) ~ "Never",
+      TRUE ~ response
+    )) %>%
+    select(response_clean, midline_pct, endline_pct) %>%
+    rename(frequency = response_clean)
+  
+  print(kable(frequency_comparison, 
+              col.names = c("Frequency", "Midline (%)", "Endline (%)"),
+              format = "simple"))
+  
+  return(frequency_comparison)
+}
+
+# Create frequency comparison tables for each priority activity
+civic_freq <- create_frequency_comparison("Civic Activities")
+betterment_freq <- create_frequency_comparison("Community Betterment")
+cultural_freq <- create_frequency_comparison("Cultural Activities")
+
+# === VISUALIZATION ===
+
+# Reshape data for plotting
+plot_data_priority <- results_priority %>%
+  pivot_longer(cols = c(Baseline_pct, Midline_pct, Endline_pct),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "Baseline_pct" ~ "Baseline",
+    Wave == "Midline_pct" ~ "Midline", 
+    Wave == "Endline_pct" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline")))
+
+# Create bar chart 
+ggplot(plot_data_priority, aes(x = Activity, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Baseline" = "#46214A", "Midline" = "#D70073", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Priority Activities Participation Across Waves",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  ylim(0, max(plot_data_priority$Percentage, na.rm = TRUE) * 1.1)
+```
+
+## Income-Affordability {.tabset}
+
+```{r, inc-1}
+cat("=== INCOME ANALYSIS: BASELINE TO ENDLINE ===\n")
+# === PART 1: HOUSEHOLD INCOME CHANGES ===
+# Check main household income variable
+baseline_income <- merged_data %>% 
+  filter(participated_baseline == TRUE) %>%
+  count(income_hh_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = income_hh_b, count_baseline = n, pct_baseline = percentage)
+
+endline_income <- merged_data %>%
+  filter(participated_endline == TRUE) %>%
+  count(income_hh_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = income_hh_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+income_comparison <- full_join(baseline_income, endline_income, by = "response") %>%
+  select(response, pct_baseline, pct_endline)
+
+cat("=== HOUSEHOLD INCOME DISTRIBUTION COMPARISON ===\n")
+kable(income_comparison, 
+      col.names = c("Income Response", "Baseline (%)", "Endline (%)"),
+      format = "simple")
+
+# === INDIVIDUAL LEVEL CHANGE ANALYSIS ===
+cat("\n=== INDIVIDUAL LEVEL INCOME CHANGES ===\n")
+
+# Look at people who participated in both baseline and endline
+longitudinal_data <- merged_data %>%
+  filter(participated_baseline == TRUE & participated_endline == TRUE) %>%
+  select(entity_uuid, income_hh_b, income_hh_e) %>%
+  filter(!is.na(income_hh_b) & !is.na(income_hh_e))
+
+cat("Number of individuals with income data at both baseline and endline:", nrow(longitudinal_data), "\n\n")
+
+if(nrow(longitudinal_data) > 0) {
+  # Create change categories
+  income_changes <- longitudinal_data %>%
+    mutate(
+      change_category = case_when(
+        income_hh_b == income_hh_e ~ "No Change",
+        income_hh_b != income_hh_e ~ "Changed",
+        TRUE ~ "Other"
+      )
+    ) %>%
+    count(change_category) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+  
+  cat("Income Change Patterns (Baseline to Endline):\n")
+  print(kable(income_changes, 
+              col.names = c("Change Type", "Count", "Percentage (%)"),
+              format = "simple"))
+  
+  # Show some examples of changes
+  cat("\nExamples of Income Changes:\n")
+  change_examples <- longitudinal_data %>%
+    filter(income_hh_b != income_hh_e) %>%
+    head(10) %>%
+    select(income_hh_b, income_hh_e)
+  
+  if(nrow(change_examples) > 0) {
+    print(kable(change_examples, 
+                col.names = c("Baseline Income", "Endline Income"),
+                format = "simple"))
+  }
+}
+
+# === VISUALIZATION ===
+
+# Plot income distribution changes
+plot_data_income <- income_comparison %>%
+  pivot_longer(cols = c(pct_baseline, pct_endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "pct_baseline" ~ "Baseline",
+    Wave == "pct_endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Endline"))) %>%
+  filter(!is.na(Percentage)) %>%
+  # Clean up income labels and create proper ordering
+  mutate(response_clean = case_when(
+    grepl("Less than", response, ignore.case = TRUE) ~ "Less than $10,000",
+    grepl("10,000.*20,000", response) ~ "$10,000-$19,999",
+    grepl("20,000.*30,000", response) ~ "$20,000-$29,999", 
+    grepl("30,000.*40,000", response) ~ "$30,000-$39,999",
+    grepl("40,000.*50,000", response) ~ "$40,000-$49,999",
+    grepl("50,000.*60,000", response) ~ "$50,000-$59,999",
+    grepl("60,000.*70,000", response) ~ "$60,000-$69,999",
+    grepl("70,000.*80,000", response) ~ "$70,000-$79,999",
+    grepl("80,000.*90,000", response) ~ "$80,000-$89,999",
+    grepl("90,000.*100,000", response) ~ "$90,000-$99,999",
+    grepl("100,000", response) ~ "$100,000+",
+    grepl("Prefer not", response, ignore.case = TRUE) ~ "Prefer not to answer",
+    TRUE ~ response
+  )) %>%
+  # Create factor with proper income order
+  mutate(response_clean = factor(response_clean, levels = c(
+    "Less than $10,000",
+    "$10,000-$19,999",
+    "$20,000-$29,999", 
+    "$30,000-$39,999",
+    "$40,000-$49,999",
+    "$50,000-$59,999",
+    "$60,000-$69,999",
+    "$70,000-$79,999",
+    "$80,000-$89,999",
+    "$90,000-$99,999",
+    "$100,000+",
+    "Prefer not to answer"
+  )))
+
+# Create bar chart
+ggplot(plot_data_income, aes(x = response_clean, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Baseline" = "#46214A", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Household Income Distribution: Baseline vs Endline",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  ylim(0, max(plot_data_income$Percentage, na.rm = TRUE) * 1.1)
+```
+
+## Income-MFI comparison {.tabset}
+
+```{r, inc-2}
+# === TRAVIS COUNTY MFI ANALYSIS USING ACTUAL INCOME DATA ===
+cat("\n=== TRAVIS COUNTY MFI COMPARISON (ACTUAL INCOME + HOUSEHOLD SIZE) ===\n")
+
+# Load the detailed endline income data
+endline_income_detail <- read.csv("Endline_IncomeData.csv", stringsAsFactors = FALSE)
+
+# 2024 HUD Income Limits for Travis County by Household Size
+hud_income_limits <- data.frame(
+  hh_size = 1:8,
+  mfi_100 = c(88200, 100800, 113400, 126000, 136100, 146150, 156250, 166300),
+  mfi_60 = c(52920, 60480, 68040, 75600, 81660, 87720, 93780, 99840),
+  mfi_30 = c(26500, 30250, 34050, 37800, 40850, 43850, 47340, 52720)
+)
+
+cat("2024 HUD Income Limits for Travis County:\n")
+print(kable(hud_income_limits, 
+            col.names = c("HH Size", "100% MFI", "60% MFI", "30% MFI"),
+            format = "simple"))
+cat("\n")
+
+# Function to estimate income from ranges for BASELINE only
+estimate_income_from_range <- function(income_range) {
+  case_when(
+    grepl("Less than.*10,000", income_range, ignore.case = TRUE) ~ 5000,
+    grepl("10,000.*19,999", income_range) ~ 15000,
+    grepl("20,000.*29,999", income_range) ~ 25000,
+    grepl("30,000.*39,999", income_range) ~ 35000,
+    grepl("40,000.*49,999", income_range) ~ 45000,
+    grepl("50,000.*59,999", income_range) ~ 55000,
+    grepl("60,000.*69,999", income_range) ~ 65000,
+    grepl("70,000.*79,999", income_range) ~ 75000,
+    grepl("80,000.*89,999", income_range) ~ 85000,
+    grepl("90,000.*99,999", income_range) ~ 95000,
+    grepl("100,000", income_range) ~ 110000,
+    TRUE ~ NA_real_
+  )
+}
+
+# Function to get MFI threshold based on household size
+get_mfi_threshold <- function(hh_size, threshold_type) {
+  capped_size <- pmin(hh_size, 8, na.rm = TRUE)
+  capped_size <- pmax(capped_size, 1, na.rm = TRUE)
+  
+  if (threshold_type == "30") {
+    return(hud_income_limits$mfi_30[capped_size])
+  } else if (threshold_type == "60") {
+    return(hud_income_limits$mfi_60[capped_size])
+  } else if (threshold_type == "100") {
+    return(hud_income_limits$mfi_100[capped_size])
+  }
+}
+
+# === BASELINE ANALYSIS (using estimated ranges) ===
+baseline_data_clean <- merged_data %>%
+  filter(participated_baseline == TRUE & 
+         !is.na(income_hh_b) & 
+         income_hh_b != "Prefer not to answer" &
+         !is.na(demo_hh_size_b)) %>%
+  mutate(
+    estimated_income = estimate_income_from_range(income_hh_b),
+    hh_size = round(demo_hh_size_b),
+    mfi_30_threshold = get_mfi_threshold(hh_size, "30"),
+    mfi_60_threshold = get_mfi_threshold(hh_size, "60"),
+    mfi_100_threshold = get_mfi_threshold(hh_size, "100"),
+    below_30_mfi = estimated_income <= mfi_30_threshold,
+    below_60_mfi = estimated_income <= mfi_60_threshold,
+    below_100_mfi = estimated_income <= mfi_100_threshold
+  )
+
+# === ENDLINE ANALYSIS (using actual income amounts) ===
+# Clean and prepare endline income detail data
+endline_income_clean <- endline_income_detail %>%
+  rename(entity_uuid = Entity.Uuid,
+         actual_income = Response.Numeric,
+         hh_size = Demo.Hh.Size) %>%
+  filter(!is.na(actual_income) & actual_income > 0 & !is.na(hh_size)) %>%
+  mutate(
+    hh_size = round(hh_size),
+    mfi_30_threshold = get_mfi_threshold(hh_size, "30"),
+    mfi_60_threshold = get_mfi_threshold(hh_size, "60"),
+    mfi_100_threshold = get_mfi_threshold(hh_size, "100"),
+    below_30_mfi = actual_income <= mfi_30_threshold,
+    below_60_mfi = actual_income <= mfi_60_threshold,
+    below_100_mfi = actual_income <= mfi_100_threshold
+  )
+
+# Get endline range data for comparison
+endline_range_data <- merged_data %>%
+  filter(participated_endline == TRUE & 
+         !is.na(income_hh_e) & 
+         income_hh_e != "Prefer not to answer")
+
+# === INCOME DISTRIBUTION ANALYSIS ===
+cat("=== INCOME DISTRIBUTION BY RANGE ===\n")
+
+# Baseline income distribution
+baseline_income_dist <- baseline_data_clean %>%
+  count(income_hh_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 1)) %>%
+  rename(income_range = income_hh_b, count_baseline = n, pct_baseline = percentage)
+
+# Endline income distribution (by range)
+endline_income_dist <- endline_range_data %>%
+  count(income_hh_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 1)) %>%
+  rename(income_range = income_hh_e, count_endline = n, pct_endline = percentage)
+
+# Combine distributions
+income_comparison <- full_join(baseline_income_dist, endline_income_dist, by = "income_range") %>%
+  replace_na(list(count_baseline = 0, pct_baseline = 0, count_endline = 0, pct_endline = 0)) %>%
+  mutate(change_pp = pct_endline - pct_baseline)
+
+cat("Income Distribution Comparison:\n")
+print(kable(income_comparison, 
+            col.names = c("Income Range", "Baseline Count", "Baseline %", 
+                         "Endline Count", "Endline %", "Change (pp)"),
+            format = "simple"))
+
+# === ACTUAL INCOME ANALYSIS FOR ENDLINE ===
+cat("\n=== ENDLINE ACTUAL INCOME ANALYSIS ===\n")
+cat("Number of endline respondents with specific income amounts:", nrow(endline_income_clean), "\n")
+cat("Income range: $", format(min(endline_income_clean$actual_income), big.mark = ","), 
+    " to $", format(max(endline_income_clean$actual_income), big.mark = ","), "\n")
+cat("Average income: $", format(round(mean(endline_income_clean$actual_income)), big.mark = ","), "\n")
+cat("Median income: $", format(round(median(endline_income_clean$actual_income)), big.mark = ","), "\n\n")
+
+# === MFI ANALYSIS SUMMARY ===
+cat("=== MFI ANALYSIS SUMMARY ===\n")
+
+baseline_mfi_summary <- baseline_data_clean %>%
+  summarise(
+    total_responses = n(),
+    avg_hh_size = round(mean(hh_size, na.rm = TRUE), 1),
+    median_hh_size = median(hh_size, na.rm = TRUE),
+    below_30_mfi_count = sum(below_30_mfi, na.rm = TRUE),
+    below_60_mfi_count = sum(below_60_mfi, na.rm = TRUE),
+    below_30_mfi_percent = round((below_30_mfi_count / total_responses) * 100, 0),
+    below_60_mfi_percent = round((below_60_mfi_count / total_responses) * 100, 0)
+  )
+
+endline_mfi_summary <- endline_income_clean %>%
+  summarise(
+    total_responses = n(),
+    avg_hh_size = round(mean(hh_size, na.rm = TRUE), 1),
+    median_hh_size = median(hh_size, na.rm = TRUE),
+    below_30_mfi_count = sum(below_30_mfi, na.rm = TRUE),
+    below_60_mfi_count = sum(below_60_mfi, na.rm = TRUE),
+    below_30_mfi_percent = round((below_30_mfi_count / total_responses) * 100, 0),
+    below_60_mfi_percent = round((below_60_mfi_count / total_responses) * 100, 0)
+  )
+
+# Create MFI comparison table
+mfi_comparison_table <- data.frame(
+  Wave = c("Baseline", "Endline"),
+  Total_Responses = c(baseline_mfi_summary$total_responses, endline_mfi_summary$total_responses),
+  Avg_HH_Size = c(baseline_mfi_summary$avg_hh_size, endline_mfi_summary$avg_hh_size),
+  Below_30_MFI_Count = c(baseline_mfi_summary$below_30_mfi_count, endline_mfi_summary$below_30_mfi_count),
+  Below_30_MFI_Percent = c(baseline_mfi_summary$below_30_mfi_percent, endline_mfi_summary$below_30_mfi_percent),
+  Below_60_MFI_Count = c(baseline_mfi_summary$below_60_mfi_count, endline_mfi_summary$below_60_mfi_count),
+  Below_60_MFI_Percent = c(baseline_mfi_summary$below_60_mfi_percent, endline_mfi_summary$below_60_mfi_percent)
+)
+
+cat("MFI Analysis (Baseline: Estimated, Endline: Actual Income):\n")
+print(kable(mfi_comparison_table, 
+            col.names = c("Wave", "Total", "Avg HH Size", "Below 30% Count", "Below 30% %", 
+                         "Below 60% Count", "Below 60% %"),
+            format = "simple"))
+
+cat("\n=== COMPARISON WITH BASELINE REPORT (SLIDE 13) ===\n")
+cat("Baseline Report Results:\n")
+cat("• 89% of fund members below 60% of MFI\n")
+cat("• 69% of fund members below 30% of MFI\n\n")
+
+cat("Current Analysis Results:\n")
+cat("• Baseline: ", baseline_mfi_summary$below_60_mfi_percent, "% below 60% MFI, ", 
+    baseline_mfi_summary$below_30_mfi_percent, "% below 30% MFI\n")
+cat("• Endline: ", endline_mfi_summary$below_60_mfi_percent, "% below 60% MFI, ", 
+    endline_mfi_summary$below_30_mfi_percent, "% below 30% MFI\n\n")
+
+change_30 <- endline_mfi_summary$below_30_mfi_percent - baseline_mfi_summary$below_30_mfi_percent
+change_60 <- endline_mfi_summary$below_60_mfi_percent - baseline_mfi_summary$below_60_mfi_percent
+
+cat("Changes from Baseline to Endline:\n")
+cat("• 60% MFI: ", ifelse(change_60 > 0, "+", ""), change_60, " percentage points\n")
+cat("• 30% MFI: ", ifelse(change_30 > 0, "+", ""), change_30, " percentage points\n\n")
+
+# === DETAILED ENDLINE INCOME BREAKDOWN ===
+cat("=== DETAILED ENDLINE INCOME BREAKDOWN ===\n")
+
+# Create income categories for actual endline data
+endline_income_clean <- endline_income_clean %>%
+  mutate(
+    income_category = case_when(
+      actual_income < 10000 ~ "Less than $10,000",
+      actual_income < 20000 ~ "$10,000-$19,999",
+      actual_income < 30000 ~ "$20,000-$29,999",
+      actual_income < 40000 ~ "$30,000-$39,999",
+      actual_income < 50000 ~ "$40,000-$49,999",
+      actual_income < 60000 ~ "$50,000-$59,999",
+      actual_income < 70000 ~ "$60,000-$69,999",
+      actual_income < 80000 ~ "$70,000-$79,999",
+      actual_income < 90000 ~ "$80,000-$89,999",
+      actual_income < 100000 ~ "$90,000-$99,999",
+      TRUE ~ "$100,000 or more"
+    )
+  )
+
+endline_actual_dist <- endline_income_clean %>%
+  count(income_category) %>%
+  mutate(percentage = round(n/sum(n)*100, 1)) %>%
+  arrange(match(income_category, c("Less than $10,000", "$10,000-$19,999", "$20,000-$29,999", 
+                                   "$30,000-$39,999", "$40,000-$49,999", "$50,000-$59,999",
+                                   "$60,000-$69,999", "$70,000-$79,999", "$80,000-$89,999",
+                                   "$90,000-$99,999", "$100,000 or more")))
+
+cat("Endline Income Distribution (Actual Amounts):\n")
+print(kable(endline_actual_dist, 
+            col.names = c("Income Range", "Count", "Percentage (%)"),
+            format = "simple"))
+
+# === VISUALIZATIONS ===
+
+# 1. Income Distribution Bar Chart
+income_plot_data <- income_comparison %>%
+  select(income_range, pct_baseline, pct_endline) %>%
+  pivot_longer(cols = c(pct_baseline, pct_endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "pct_baseline" ~ "Baseline",
+    Wave == "pct_endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Endline"))) %>%
+  mutate(income_clean = case_when(
+    grepl("Less than", income_range, ignore.case = TRUE) ~ "< $10K",
+    grepl("10,000.*19,999", income_range) ~ "$10-19K",
+    grepl("20,000.*29,999", income_range) ~ "$20-29K",
+    grepl("30,000.*39,999", income_range) ~ "$30-39K",
+    grepl("40,000.*49,999", income_range) ~ "$40-49K",
+    grepl("50,000.*59,999", income_range) ~ "$50-59K",
+    grepl("60,000.*69,999", income_range) ~ "$60-69K",
+    grepl("70,000.*79,999", income_range) ~ "$70-79K",
+    grepl("80,000.*89,999", income_range) ~ "$80-89K",
+    grepl("90,000.*99,999", income_range) ~ "$90-99K",
+    grepl("100,000", income_range) ~ "$100K+",
+    grepl("Prefer not", income_range, ignore.case = TRUE) ~ "No Answer",
+    TRUE ~ income_range
+  )) %>%
+  mutate(income_clean = factor(income_clean, levels = c(
+    "< $10K", "$10-19K", "$20-29K", "$30-39K", "$40-49K", 
+    "$50-59K", "$60-69K", "$70-79K", "$80-89K", "$90-99K", "$100K+", "No Answer"
+  )))
+
+# Income Distribution Chart
+ggplot(income_plot_data, aes(x = income_clean, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(values = c("Baseline" = "#46214A", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Household Income Distribution: Baseline vs Endline",
+    x = "Income Range",
+    y = "Percentage (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  geom_text(aes(label = ifelse(Percentage > 0, paste0(Percentage, "%"), "")), 
+            position = position_dodge(width = 0.7), 
+            vjust = -0.5, size = 3) +
+  ylim(0, max(income_plot_data$Percentage, na.rm = TRUE) * 1.15)
+
+# 2. MFI Comparison Chart
+mfi_plot_data <- data.frame(
+  Metric = rep(c("Below 30% MFI", "Below 60% MFI"), 2),
+  Wave = rep(c("Baseline", "Endline"), each = 2),
+  Percentage = c(baseline_mfi_summary$below_30_mfi_percent, baseline_mfi_summary$below_60_mfi_percent,
+                 endline_mfi_summary$below_30_mfi_percent, endline_mfi_summary$below_60_mfi_percent)
+) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Endline")))
+
+ggplot(mfi_plot_data, aes(x = Metric, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(values = c("Baseline" = "#46214A", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Travis County MFI Analysis: Baseline vs Endline",
+    x = "MFI Threshold",
+    y = "Percentage of Fund Members (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  geom_text(aes(label = paste0(Percentage, "%")), 
+            position = position_dodge(width = 0.7), 
+            vjust = -0.5, size = 4) +
+  ylim(0, max(mfi_plot_data$Percentage) * 1.1)
+
+```
+
+## Employment {.tabset}
+
+```{r, Emp-1}
+cat("=== EMPLOYMENT STATUS ANALYSIS ===\n")
+# Calculate employment percentages for each wave
+baseline_emp <- merged_data %>% 
+  filter(participated_baseline == TRUE) %>%
+  count(work_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = work_b, count_baseline = n, pct_baseline = percentage)
+
+midline_emp <- merged_data %>%
+  filter(participated_midline == TRUE) %>%
+  count(emp_status_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = emp_status_m, count_midline = n, pct_midline = percentage)
+
+endline_emp <- merged_data %>%
+  filter(participated_endline == TRUE) %>%
+  count(emp_status_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = emp_status_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+employment_comparison <- full_join(baseline_emp, midline_emp, by = "response") %>%
+  full_join(endline_emp, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("\n=== EMPLOYMENT STATUS COMPARISON ===\n")
+kable(employment_comparison, 
+      col.names = c("Employment Status", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# === STACKED BAR CHART PREPARATION ===
+# Create data for stacked bar chart
+employment_stacked <- employment_comparison %>%
+  # Clean up employment categories
+  mutate(employment_clean = case_when(
+    response == "Yes" ~ "Employed",
+    response == "No" ~ "Unemployed",
+    response == "Prefer not to answer" ~ "Prefer not to answer",
+    TRUE ~ response
+  )) %>%
+  # Replace NA percentages with 0
+  mutate(
+    pct_baseline = ifelse(is.na(pct_baseline), 0, pct_baseline),
+    pct_midline = ifelse(is.na(pct_midline), 0, pct_midline),
+    pct_endline = ifelse(is.na(pct_endline), 0, pct_endline)
+  ) %>%
+  # Reshape for plotting 
+  pivot_longer(cols = c(pct_baseline, pct_midline, pct_endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "pct_baseline" ~ "Baseline",
+    Wave == "pct_midline" ~ "Midline", 
+    Wave == "pct_endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline"))) %>%
+  filter(Percentage > 0)  # Only keep non-zero percentages
+
+# Display cleaned employment data
+cat("\n=== CLEANED EMPLOYMENT CATEGORIES ===\n")
+employment_summary <- employment_stacked %>%
+  pivot_wider(names_from = Wave, values_from = Percentage, values_fill = 0) %>%
+  select(employment_clean, Baseline, Midline, Endline)
+
+kable(employment_summary, 
+      col.names = c("Employment Status", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# Display cleaned employment data
+cat("\n=== CLEANED EMPLOYMENT CATEGORIES ===\n")
+employment_summary <- employment_stacked %>%
+  pivot_wider(names_from = Wave, values_from = Percentage, values_fill = 0) %>%
+  select(employment_clean, Baseline, Midline, Endline)
+
+kable(employment_summary, 
+      col.names = c("Employment Status", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# === PREFER NOT TO ANSWER ANALYSIS ===
+cat("\n=== 'PREFER NOT TO ANSWER' ANALYSIS ===\n")
+prefer_not_data <- employment_summary %>%
+  filter(grepl("Prefer not", employment_clean, ignore.case = TRUE))
+
+if(nrow(prefer_not_data) > 0) {
+  kable(prefer_not_data, 
+        col.names = c("Response Type", "Baseline (%)", "Midline (%)", "Endline (%)"),
+        format = "simple")
+} else {
+  cat("No 'Prefer not to answer' responses found in employment data.\n")
+}
+
+# === VISUALIZATION ===
+# Create stacked bar chart
+employment_colors <- c("Employed" = "#46214A", 
+                      "Unemployed" = "#D70073", 
+                      "Prefer not to answer" = "#FF8C00",
+                      "Other" = "#5E2D91")
+
+ggplot(employment_stacked, aes(x = Wave, y = Percentage, fill = employment_clean)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = employment_colors) +
+  labs(
+    title = "Employment Status Distribution Across Waves",
+    x = "Survey Wave",
+    y = "Percentage (%)",
+    fill = "Employment Status"
+  ) +
+  theme_larger_text +
+  theme(
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  geom_text(aes(label = ifelse(Percentage >= 5, paste0(Percentage, "%"), "")), 
+            position = position_stack(vjust = 0.5), 
+            size = 3, 
+            color = "white", 
+            fontface = "bold")
+```
+```{r, emp-2}
+# Reasons for Unemployment Analysis
+cat("=== REASONS FOR UNEMPLOYMENT ANALYSIS ===\n")
+
+# Calculate unemployment reasons for each wave
+baseline_reasons <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(work_no_reason_b)) %>%
+  count(work_no_reason_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = work_no_reason_b, count_baseline = n, pct_baseline = percentage)
+
+midline_reasons <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(emp_unemployed_reason_m)) %>%
+  count(emp_unemployed_reason_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = emp_unemployed_reason_m, count_midline = n, pct_midline = percentage)
+
+endline_reasons <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(emp_unemployed_reason_e)) %>%
+  count(emp_unemployed_reason_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = emp_unemployed_reason_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+reasons_comparison <- full_join(baseline_reasons, midline_reasons, by = "response") %>%
+  full_join(endline_reasons, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("\n=== UNEMPLOYMENT REASONS COMPARISON ===\n")
+kable(reasons_comparison, 
+      col.names = c("Reason for Unemployment", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# Sample sizes for context
+cat("\n=== SAMPLE SIZES ===\n")
+sample_sizes <- data.frame(
+  Wave = c("Baseline", "Midline", "Endline"),
+  Unemployed_Respondents = c(
+    sum(!is.na(merged_data$work_no_reason_b)),
+    sum(!is.na(merged_data$emp_unemployed_reason_m)),
+    sum(!is.na(merged_data$emp_unemployed_reason_e))
+  )
+)
+
+kable(sample_sizes, 
+      col.names = c("Wave", "Unemployed Respondents (n)"),
+      format = "simple")
+
+# === VISUALIZATION ===
+
+# Reshape data for plotting
+plot_data_reasons <- reasons_comparison %>%
+  pivot_longer(cols = c(pct_baseline, pct_midline, pct_endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "pct_baseline" ~ "Baseline",
+    Wave == "pct_midline" ~ "Midline", 
+    Wave == "pct_endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline"))) %>%
+  filter(!is.na(Percentage) & Percentage > 0) %>%
+  # Clean up reason labels for better display
+  mutate(response_clean = ifelse(nchar(response) > 30, 
+                                paste0(substr(response, 1, 30), "..."), 
+                                response))
+
+# Create bar chart
+ggplot(plot_data_reasons, aes(x = response_clean, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Baseline" = "#46214A", "Midline" = "#D70073", "Endline" = "#FF8C00")) +
+  labs(
+    title = "Reasons for Unemployment Across Waves",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Wave"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  ) +
+  ylim(0, max(plot_data_reasons$Percentage, na.rm = TRUE) * 1.1)
+```
+
+```{r, emp-3}
+cat("=== EMPLOYMENT BY DEMOGRAPHICS (ENDLINE) ===\n")
+
+# Create dataset with endline employment and baseline demographics
+demo_employment <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(emp_status_e)) %>%
+  # Only keep people who also have demographic data
+  filter(!is.na(demo_race_b) | !is.na(demo_gender_b) | !is.na(demo_disability_b)) %>%
+  select(entity_uuid, emp_status_e, demo_race_b, demo_gender_b, demo_sex_at_birth_b, demo_disability_b) %>%
+  # Clean employment status - it's Yes/No not Employed/Unemployed
+  mutate(employed = case_when(
+    emp_status_e == "Yes" ~ "Employed",
+    emp_status_e == "No" ~ "Unemployed", 
+    emp_status_e == "Prefer not to answer" ~ "Prefer not to answer",
+    TRUE ~ emp_status_e
+  ))
+
+cat("Sample size for demographic analysis:", nrow(demo_employment), "\n")
+cat("Employment status distribution:\n")
+print(table(demo_employment$employed))
+
+# === 1. EMPLOYMENT BY RACE ===
+cat("\n=== EMPLOYMENT BY RACE ===\n")
+
+race_employment <- demo_employment %>%
+  filter(!is.na(demo_race_b)) %>%
+  mutate(
+    race_category = case_when(
+      grepl("Black or African American", demo_race_b) & !grepl(",", demo_race_b) ~ "Black or African American",
+      grepl("Hispanic or Latino", demo_race_b) & !grepl(",", demo_race_b) ~ "Hispanic or Latino",
+      grepl(",", demo_race_b) ~ "Multiracial",
+      demo_race_b == "Asian" ~ "Asian",
+      demo_race_b == "White" ~ "White",
+      demo_race_b == "Prefer not to answer" ~ "Prefer not to answer",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  filter(race_category != "Other" & race_category != "Prefer not to answer") %>%
+  count(race_category, employed) %>%
+  group_by(race_category) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  ungroup()
+
+cat("Sample size for race analysis:", sum(race_employment$n), "\n")
+
+# Create summary table for employment rates
+race_summary <- race_employment %>%
+  filter(employed == "Employed") %>%
+  select(race_category, percentage) %>%
+  arrange(desc(percentage))
+
+kable(race_summary, 
+      col.names = c("Race/Ethnicity", "Employment Rate (%)"),
+      format = "simple")
+
+# === 2. EMPLOYMENT BY GENDER (SOGI) ===
+cat("\n=== EMPLOYMENT BY GENDER (SOGI) ===\n")
+
+# Function to categorize gender
+categorize_gender <- function(sex_at_birth, gender) {
+  case_when(
+    sex_at_birth == "Male" & gender == "Male" ~ "Cisgender-Heterosexual",
+    sex_at_birth == "Female" & gender == "Female" ~ "Cisgender-Heterosexual",
+    sex_at_birth == "Male" & gender %in% c("Female", "Transgender", "Nonbinary", "None of these") ~ "LGBTQ+",
+    sex_at_birth == "Female" & gender %in% c("Male", "Transgender", "Nonbinary", "None of these") ~ "LGBTQ+",
+    grepl("Transgender|Nonbinary", gender) ~ "LGBTQ+",
+    sex_at_birth == "Prefer not to answer" ~ "Prefer not to answer",
+    TRUE ~ "Other"
+  )
+}
+
+gender_employment <- demo_employment %>%
+  filter(!is.na(demo_sex_at_birth_b) & !is.na(demo_gender_b)) %>%
+  mutate(
+    gender_category = categorize_gender(demo_sex_at_birth_b, demo_gender_b)
+  ) %>%
+  filter(gender_category != "Other") %>%
+  count(gender_category, employed) %>%
+  group_by(gender_category) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  ungroup()
+
+cat("Sample size for gender analysis:", sum(gender_employment$n), "\n")
+
+# Create summary table
+gender_summary <- gender_employment %>%
+  filter(employed == "Employed") %>%
+  select(gender_category, percentage) %>%
+  arrange(desc(percentage))
+
+kable(gender_summary, 
+      col.names = c("SOGI Category", "Employment Rate (%)"),
+      format = "simple")
+
+# === 3. EMPLOYMENT BY DISABILITY STATUS ===
+cat("\n=== EMPLOYMENT BY DISABILITY STATUS ===\n")
+
+disability_employment <- demo_employment %>%
+  filter(!is.na(demo_disability_b)) %>%
+  count(demo_disability_b, employed) %>%
+  group_by(demo_disability_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  ungroup()
+
+cat("Sample size for disability analysis:", sum(disability_employment$n), "\n")
+
+# Create summary table
+disability_summary <- disability_employment %>%
+  filter(employed == "Employed") %>%
+  select(demo_disability_b, percentage) %>%
+  arrange(desc(percentage))
+
+kable(disability_summary, 
+      col.names = c("Disability Status", "Employment Rate (%)"),
+      format = "simple")
+
+# === VISUALIZATIONS ===
+
+# 1. Employment by Race
+p1 <- ggplot(race_employment, aes(x = race_category, y = percentage, fill = employed)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("Employed" = "#46214A", 
+                              "Unemployed" = "#D70073", 
+                              "Prefer not to answer" = "#5E2D91")) +
+  labs(
+    title = "Employment Status by Race/Ethnicity (Endline)",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Employment Status"
+  ) +
+  theme_larger_text +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
+print(p1)
+
+# 2. Employment by Gender (SOGI)
+p2 <- ggplot(gender_employment, aes(x = gender_category, y = percentage, fill = employed)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("Employed" = "#46214A", 
+                              "Unemployed" = "#D70073", 
+                              "Prefer not to answer" = "#5E2D91")) +
+  labs(
+    title = "Employment Status by SOGI Category (Endline)",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Employment Status"
+  ) +
+  theme_larger_text +
+  theme(
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
+print(p2)
+
+# 3. Employment by Disability Status
+p3 <- ggplot(disability_employment, aes(x = demo_disability_b, y = percentage, fill = employed)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("Employed" = "#46214A", 
+                              "Unemployed" = "#D70073", 
+                              "Prefer not to answer" = "#5E2D91")) +
+  labs(
+    title = "Employment Status by Disability Status (Endline)",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Employment Status"
+  ) +
+  theme_larger_text +
+  theme(
+    plot.margin = margin(20, 20, 20, 20)
+  )
+
+print(p3)
+```
+
+```{r, emp-4}
+cat("=== WORKFORCE DEVELOPMENT PROGRAM AWARENESS ===\n")
+
+# === 1. PROGRAM AWARENESS (austin_programs_y_n) ===
+# Calculate program awareness for each wave
+baseline_awareness <- merged_data %>% 
+  filter(participated_baseline == TRUE) %>%
+  count(austin_programs_y_n_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = austin_programs_y_n_b, count_baseline = n, pct_baseline = percentage)
+
+# midline
+midline_awareness <- if("austin_programs_y_n_m" %in% names(merged_data)) {
+  merged_data %>%
+    filter(participated_midline == TRUE) %>%
+    count(austin_programs_y_n_m) %>%
+    mutate(percentage = round(n/sum(n)*100, 0)) %>%
+    rename(response = austin_programs_y_n_m, count_midline = n, pct_midline = percentage)
+} else {
+  data.frame(response = NA, count_midline = NA, pct_midline = NA)
+}
+
+endline_awareness <- if("austin_programs_y_n_e" %in% names(merged_data)) {
+  merged_data %>%
+    filter(participated_endline == TRUE) %>%
+    count(austin_programs_y_n_e) %>%
+    mutate(percentage = round(n/sum(n)*100, 0)) %>%
+    rename(response = austin_programs_y_n_e, count_endline = n, pct_endline = percentage)
+} else {
+  data.frame(response = NA, count_endline = NA, pct_endline = NA)
+}
+
+# Create comparison table
+awareness_comparison <- full_join(baseline_awareness, midline_awareness, by = "response") %>%
+  full_join(endline_awareness, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("Program Awareness - Are you aware of Austin workforce development programs?\n")
+kable(awareness_comparison, 
+      col.names = c("Response", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# === 2. WHICH PROGRAMS (austin_programs) ===
+cat("\n=== WHICH AUSTIN PROGRAMS ARE MEMBERS AWARE OF? ===\n")
+
+# Function to analyze program types mentioned
+analyze_programs <- function(program_data, wave_name) {
+  if(all(is.na(program_data))) {
+    cat(paste(wave_name, ": No program data available\n"))
+    return(NULL)
+  }
+  
+  cat(paste("\n", wave_name, "Programs Mentioned:\n"))
+  program_responses <- program_data[!is.na(program_data)]
+  
+  if(length(program_responses) > 0) {
+    # Count mentions of common program types
+    program_counts <- data.frame(
+      Program_Type = c("Job Training", "Career Counseling", "Workforce Development", 
+                      "Skills Training", "Employment Services", "Other"),
+      Count = c(
+        sum(grepl("job.*train|train.*job", program_responses, ignore.case = TRUE)),
+        sum(grepl("career.*counsel|counsel.*career", program_responses, ignore.case = TRUE)),
+        sum(grepl("workforce", program_responses, ignore.case = TRUE)),
+        sum(grepl("skill.*train|train.*skill", program_responses, ignore.case = TRUE)),
+        sum(grepl("employ.*service|service.*employ", program_responses, ignore.case = TRUE)),
+        length(program_responses) - sum(c(
+          sum(grepl("job.*train|train.*job", program_responses, ignore.case = TRUE)),
+          sum(grepl("career.*counsel|counsel.*career", program_responses, ignore.case = TRUE)),
+          sum(grepl("workforce", program_responses, ignore.case = TRUE)),
+          sum(grepl("skill.*train|train.*skill", program_responses, ignore.case = TRUE)),
+          sum(grepl("employ.*service|service.*employ", program_responses, ignore.case = TRUE))
+        ))
+      )
+    ) %>%
+    filter(Count > 0) %>%
+    mutate(Percentage = round(Count/length(program_responses)*100, 0))
+    
+    print(kable(program_counts, 
+                col.names = c("Program Type", "Count", "Percentage (%)"),
+                format = "simple"))
+  }
+  
+  return(program_responses)
+}
+
+# Analyze programs for each wave
+baseline_programs <- analyze_programs(merged_data$austin_programs_b[merged_data$participated_baseline], "Baseline")
+if("austin_programs_m" %in% names(merged_data)) {
+  midline_programs <- analyze_programs(merged_data$austin_programs_m[merged_data$participated_midline], "Midline")
+}
+if("austin_programs_e" %in% names(merged_data)) {
+  endline_programs <- analyze_programs(merged_data$austin_programs_e[merged_data$participated_endline], "Endline")
+}
+
+# === 3. PUBLIC BENEFITS USAGE (spend_needs_meet) ===
+cat("\n=== PUBLIC BENEFITS USAGE ANALYSIS ===\n")
+
+# Function to check if receiving benefits
+receiving_benefits <- function(benefits_data) {
+  ifelse(is.na(benefits_data), NA, 
+         !grepl("I do not receive|not receive", benefits_data, ignore.case = TRUE))
+}
+
+# Calculate benefits usage for each wave
+baseline_benefits <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(spend_needs_meet_b)) %>%
+  mutate(receives_benefits = receiving_benefits(spend_needs_meet_b)) %>%
+  count(receives_benefits) %>%
+  mutate(percentage = round(n/sum(n)*100, 0))
+
+midline_benefits <- if("fin_needs_met_m" %in% names(merged_data)) {
+  merged_data %>%
+    filter(participated_midline == TRUE & !is.na(fin_needs_met_m)) %>%
+    mutate(receives_benefits = receiving_benefits(fin_needs_met_m)) %>%
+    count(receives_benefits) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+} else {
+  data.frame(receives_benefits = NA, n = NA, percentage = NA)
+}
+
+endline_benefits <- if("fin_needs_met_e" %in% names(merged_data)) {
+  merged_data %>%
+    filter(participated_endline == TRUE & !is.na(fin_needs_met_e)) %>%
+    mutate(receives_benefits = receiving_benefits(fin_needs_met_e)) %>%
+    count(receives_benefits) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+} else {
+  data.frame(receives_benefits = NA, n = NA, percentage = NA)
+}
+
+cat("Percentage receiving public benefits:\n")
+benefits_summary <- data.frame(
+  Wave = c("Baseline", "Midline", "Endline"),
+  Receiving_Benefits = c(
+    ifelse(nrow(baseline_benefits) > 0, baseline_benefits$percentage[baseline_benefits$receives_benefits == TRUE], NA),
+    ifelse(nrow(midline_benefits) > 0, midline_benefits$percentage[midline_benefits$receives_benefits == TRUE], NA),
+    ifelse(nrow(endline_benefits) > 0, endline_benefits$percentage[endline_benefits$receives_benefits == TRUE], NA)
+  )
+)
+
+kable(benefits_summary, 
+      col.names = c("Wave", "Receiving Benefits (%)"),
+      format = "simple")
+
+# === 4. BENEFITS REDUCTION (benefits_reduce) ===
+cat("\n=== BENEFITS REDUCTION ANALYSIS ===\n")
+
+# Check if people experienced benefits reduction
+if("benefits_reduce_m" %in% names(merged_data)) {
+  midline_reduction <- merged_data %>%
+    filter(participated_midline == TRUE & !is.na(benefits_reduce_m)) %>%
+    count(benefits_reduce_m) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+  
+  cat("Midline - Did your benefits get reduced?\n")
+  kable(midline_reduction, 
+        col.names = c("Response", "Count", "Percentage (%)"),
+        format = "simple")
+}
+
+if("benefits_reduce_e" %in% names(merged_data)) {
+  endline_reduction <- merged_data %>%
+    filter(participated_endline == TRUE & !is.na(benefits_reduce_e)) %>%
+    count(benefits_reduce_e) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+  
+  cat("\nEndline - Did your benefits get reduced?\n")
+  kable(endline_reduction, 
+        col.names = c("Response", "Count", "Percentage (%)"),
+        format = "simple")
+}
+
+# === VISUALIZATION ===
+
+# Plot program awareness
+if(nrow(awareness_comparison) > 0) {
+  plot_data_awareness <- awareness_comparison %>%
+    pivot_longer(cols = c(pct_baseline, pct_midline, pct_endline),
+                 names_to = "Wave", 
+                 values_to = "Percentage") %>%
+    mutate(Wave = case_when(
+      Wave == "pct_baseline" ~ "Baseline",
+      Wave == "pct_midline" ~ "Midline", 
+      Wave == "pct_endline" ~ "Endline"
+    )) %>%
+    mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline"))) %>%
+    filter(!is.na(Percentage) & !is.na(response))
+  
+  ggplot(plot_data_awareness, aes(x = response, y = Percentage, fill = Wave)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    scale_fill_manual(values = c("Baseline" = "#46214A", "Midline" = "#D70073", "Endline" = "#FF8C00")) +
+    labs(
+      title = "Austin Workforce Development Program Awareness",
+      x = "",
+      y = "Percentage (%)",
+      fill = "Wave"
+    ) +
+    theme_larger_text +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      plot.margin = margin(20, 20, 20, 20)
+    )
+}
+
+cat("\n=== KEY INSIGHTS FOR CITY SERVICE GAPS ===\n")
+cat("1. Program Awareness: Shows whether Austin's outreach is reaching members\n")
+cat("2. Benefits Usage: Tracks stability of public benefit access\n")
+cat("3. Benefits Reduction: Identifies if members are losing support\n")
+cat("4. Use this data to advocate for better workforce development outreach\n")
+```
+
+```{r, emp-5:goals}
+cat("=== EMPLOYMENT GOALS PROGRESS ANALYSIS ===\n")
+
+# === 1. IDENTIFY PEOPLE WHO HAD "FINDING A NEW JOB" GOAL ===
+cat("Step 1: Finding people who had 'Finding a new job' as a goal\n")
+
+# Check baseline goals
+baseline_job_seekers <- merged_data %>%
+  filter(!is.na(goals_job_b)) %>%
+  filter(grepl("Finding a new job|new job|find.*job", goals_job_b, ignore.case = TRUE)) %>%
+  select(entity_uuid, goals_job_b, goals_job_new_b)
+
+cat("Baseline job seekers:", nrow(baseline_job_seekers), "\n")
+
+# Check midline goals
+midline_job_seekers <- if("goals_job_m" %in% names(merged_data)) {
+  merged_data %>%
+    filter(!is.na(goals_job_m)) %>%
+    filter(grepl("Finding a new job|new job|find.*job", goals_job_m, ignore.case = TRUE)) %>%
+    select(entity_uuid, goals_job_m, goals_job_new_m)
+} else {
+  data.frame(entity_uuid = character(), goals_job_m = character(), goals_job_new_m = character())
+}
+
+cat("Midline job seekers:", nrow(midline_job_seekers), "\n")
+
+# Combine all job seekers (baseline OR midline)
+all_job_seekers <- unique(c(baseline_job_seekers$entity_uuid, midline_job_seekers$entity_uuid))
+cat("Total unique people who had 'finding a new job' goal:", length(all_job_seekers), "\n")
+
+# === 2. CHECK ENDLINE OUTCOMES FOR JOB SEEKERS ===
+cat("\n=== EMPLOYMENT OUTCOMES FOR JOB SEEKERS ===\n")
+
+job_seeker_outcomes <- merged_data %>%
+  filter(entity_uuid %in% all_job_seekers & participated_endline == TRUE) %>%
+  select(entity_uuid, work_new_6mo_e) %>%
+  filter(!is.na(work_new_6mo_e))
+
+cat("Job seekers with endline data:", nrow(job_seeker_outcomes), "\n")
+
+if(nrow(job_seeker_outcomes) > 0) {
+  # Calculate success rate
+  success_rate <- job_seeker_outcomes %>%
+    count(work_new_6mo_e) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+  
+  cat("\nEmployment outcomes for people who wanted to find a new job:\n")
+  kable(success_rate, 
+        col.names = c("Found New Job in Last 6 Months", "Count", "Percentage (%)"),
+        format = "simple")
+  
+  # Extract key statistic
+  found_job_pct <- success_rate$percentage[success_rate$work_new_6mo_e == "Yes"]
+  if(length(found_job_pct) > 0) {
+    cat(sprintf("\n🎉 SUCCESS STORY: %d%% of people who wanted to find a new job successfully found one!\n", found_job_pct))
+  }
+}
+
+# === 3. ANALYZE REASONS FOR JOB SEEKING (SUCCESS STORIES) ===
+cat("\n=== REASONS FOR JOB SEEKING (SUCCESS STORIES) ===\n")
+
+# Get successful job seekers
+successful_job_seekers <- job_seeker_outcomes %>%
+  filter(work_new_6mo_e == "Yes") %>%
+  pull(entity_uuid)
+
+cat("Number of successful job seekers:", length(successful_job_seekers), "\n")
+
+if(length(successful_job_seekers) > 0) {
+  # Get their baseline reasons
+  baseline_reasons <- merged_data %>%
+    filter(entity_uuid %in% successful_job_seekers) %>%
+    select(entity_uuid, goals_job_new_b) %>%
+    filter(!is.na(goals_job_new_b))
+  
+  # Get their midline reasons
+  midline_reasons <- if("goals_job_new_m" %in% names(merged_data)) {
+    merged_data %>%
+      filter(entity_uuid %in% successful_job_seekers) %>%
+      select(entity_uuid, goals_job_new_m) %>%
+      filter(!is.na(goals_job_new_m))
+  } else {
+    data.frame(entity_uuid = character(), goals_job_new_m = character())
+  }
+  
+  cat("\nBaseline reasons for job seeking (successful job finders):\n")
+  if(nrow(baseline_reasons) > 0) {
+    baseline_reason_text <- paste(baseline_reasons$goals_job_new_b, collapse = "; ")
+    cat("Sample reasons:", substr(baseline_reason_text, 1, 500), "...\n")
+    
+    # Analyze common themes
+    all_baseline_reasons <- baseline_reasons$goals_job_new_b
+    common_themes <- data.frame(
+      Theme = c("Better Pay/Income", "Career Advancement", "Better Benefits", 
+                "Work-Life Balance", "Job Security", "Skills Utilization"),
+      Count = c(
+        sum(grepl("pay|income|salary|money|wage", all_baseline_reasons, ignore.case = TRUE)),
+        sum(grepl("advance|career|promotion|grow", all_baseline_reasons, ignore.case = TRUE)),
+        sum(grepl("benefit|health|insurance", all_baseline_reasons, ignore.case = TRUE)),
+        sum(grepl("balance|time|flexible|hours", all_baseline_reasons, ignore.case = TRUE)),
+        sum(grepl("security|stable|permanent", all_baseline_reasons, ignore.case = TRUE)),
+        sum(grepl("skill|talent|experience|utilize", all_baseline_reasons, ignore.case = TRUE))
+      )
+    ) %>%
+    filter(Count > 0) %>%
+    arrange(desc(Count))
+    
+    if(nrow(common_themes) > 0) {
+      cat("\nMost common reasons for successful job seekers:\n")
+      kable(common_themes, format = "simple")
+    }
+  }
+  
+  cat("\nMidline reasons for job seeking (successful job finders):\n")
+  if(nrow(midline_reasons) > 0) {
+    midline_reason_text <- paste(midline_reasons$goals_job_new_m, collapse = "; ")
+    cat("Sample reasons:", substr(midline_reason_text, 1, 500), "...\n")
+  }
+}
+
+# === 4. STORYTELLING NARRATIVE ===
+cat("\n=== STORYTELLING NARRATIVE ===\n")
+
+if(exists("found_job_pct") && length(found_job_pct) > 0) {
+  cat("📊 KEY FINDING:\n")
+  cat(sprintf("Among members who set a goal to find a new job, %d%% successfully found new employment within 6 months.\n\n", found_job_pct))
+  
+  if(exists("common_themes") && nrow(common_themes) > 0) {
+    top_reasons <- head(common_themes$Theme, 3)
+    cat("💼 SUCCESS STORY THEMES:\n")
+    cat("The most common motivations among successful job seekers were:\n")
+    for(i in 1:min(3, length(top_reasons))) {
+      cat(sprintf("• %s\n", top_reasons[i]))
+    }
+    cat("\nThis shows that members who found new jobs were primarily motivated by improving their economic circumstances and career prospects.\n")
+  }
+}
+```
+
+```{r, emp-6:goals-2}
+cat("=== WORK HOURS INCREASE PROGRESS ===\n")
+
+# Find people who wanted to increase hours (baseline OR midline)
+baseline_hour_seekers <- merged_data %>%
+  filter(goals_job_b == "Increasing my working hours") %>%
+  pull(entity_uuid)
+
+midline_hour_seekers <- if("goals_job_m" %in% names(merged_data)) {
+  merged_data %>%
+    filter(goals_job_m == "Increasing my working hours") %>%
+    pull(entity_uuid)
+} else {
+  character()
+}
+
+all_hour_seekers <- unique(c(baseline_hour_seekers, midline_hour_seekers))
+cat("People who wanted to increase work hours:", length(all_hour_seekers), "\n")
+cat("- Baseline:", length(baseline_hour_seekers), "\n")
+cat("- Midline:", length(midline_hour_seekers), "\n")
+
+# Check endline outcomes for these people
+hour_outcomes <- merged_data %>%
+  filter(entity_uuid %in% all_hour_seekers & participated_endline == TRUE & !is.na(emp_hours_change_e)) %>%
+  count(emp_hours_change_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0))
+
+cat("\nWork hours outcomes for people who wanted to increase hours:\n")
+kable(hour_outcomes, 
+      col.names = c("Hours Change", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Success rate
+increased_pct <- hour_outcomes$percentage[hour_outcomes$emp_hours_change_e == "My work hours have INCREASED"]
+if(length(increased_pct) > 0) {
+  cat(sprintf("\n🎉 SUCCESS: %d%% achieved their goal of increasing work hours!\n", increased_pct))
+}
+
+# Get successful hour increasers
+successful_hour_increasers <- merged_data %>%
+  filter(entity_uuid %in% all_hour_seekers & 
+         emp_hours_change_e == "My work hours have INCREASED") %>%
+  pull(entity_uuid)
+
+cat(sprintf("\nAnalyzing reasons for %d successful hour increasers:\n", length(successful_hour_increasers)))
+
+# Baseline reasons for wanting more hours
+baseline_reasons <- merged_data %>%
+  filter(entity_uuid %in% successful_hour_increasers & !is.na(goals_job_increase_b)) %>%
+  pull(goals_job_increase_b)
+
+if(length(baseline_reasons) > 0) {
+  cat("Baseline motivations for wanting more hours:\n")
+  for(i in 1:min(5, length(baseline_reasons))) {
+    cat(paste("-", baseline_reasons[i], "\n"))
+  }
+}
+
+# Endline reasons why hours increased
+endline_reasons <- merged_data %>%
+  filter(entity_uuid %in% successful_hour_increasers & !is.na(emp_increase_e)) %>%
+  pull(emp_increase_e)
+
+if(length(endline_reasons) > 0) {
+  cat("\nEndline reasons why their hours increased:\n")
+  for(i in 1:min(5, length(endline_reasons))) {
+    cat(paste("-", endline_reasons[i], "\n"))
+  }
+}
+
+#No one wanted to reduce their hours in baseline or midline
+```
+
+```{r, emp-7:goals-3}
+# Business Goals Progress Analysis
+cat("=== BUSINESS GOALS PROGRESS ===\n")
+
+# Find people who wanted to start/grow business (baseline OR midline)
+baseline_entrepreneurs <- merged_data %>%
+  filter(goals_job_b == "Starting or growing my own business") %>%
+  pull(entity_uuid)
+
+midline_entrepreneurs <- if("goals_job_m" %in% names(merged_data)) {
+  merged_data %>%
+    filter(goals_job_m == "Starting or growing my own business") %>%
+    pull(entity_uuid)
+} else {
+  character()
+}
+
+all_entrepreneurs <- unique(c(baseline_entrepreneurs, midline_entrepreneurs))
+cat("People who wanted to start/grow business:", length(all_entrepreneurs), "\n")
+cat("- Baseline:", length(baseline_entrepreneurs), "\n")
+cat("- Midline:", length(midline_entrepreneurs), "\n")
+
+# Check endline business outcomes for these people
+business_outcomes <- merged_data %>%
+  filter(entity_uuid %in% all_entrepreneurs & participated_endline == TRUE & !is.na(own_business_e)) %>%
+  count(own_business_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0))
+
+cat("\nBusiness outcomes for people who wanted to start/grow business:\n")
+kable(business_outcomes, 
+      col.names = c("Business Status", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Calculate success rate (any business activity)
+business_activity_responses <- c("I run my own business", 
+                               "I am working on starting a business", 
+                               "I am working on expanding a side gig into a business")
+
+success_count <- business_outcomes %>%
+  filter(own_business_e %in% business_activity_responses) %>%
+  summarise(total_success = sum(n), total_pct = sum(percentage))
+
+if(nrow(success_count) > 0 && success_count$total_pct > 0) {
+  cat(sprintf("\n🎉 SUCCESS: %d%% are actively running or working on a business!\n", success_count$total_pct))
+}
+
+# Show detailed breakdown
+cat("\nDetailed business activity breakdown:\n")
+business_detailed <- business_outcomes %>%
+  mutate(
+    activity_type = case_when(
+      own_business_e == "I run my own business" ~ "Running Business",
+      own_business_e == "I am working on starting a business" ~ "Starting Business", 
+      own_business_e == "I am working on expanding a side gig into a business" ~ "Expanding Side Gig",
+      TRUE ~ "Other/No Business Activity"
+    )
+  ) %>%
+  group_by(activity_type) %>%
+  summarise(total_pct = sum(percentage), .groups = 'drop') %>%
+  arrange(desc(total_pct))
+
+kable(business_detailed, 
+      col.names = c("Activity Type", "Percentage (%)"),
+      format = "simple")
+```
+
+```{r,emp-financialdifficulty}
+
+cat("=== DIFFICULTY PAYING HOUSEHOLD EXPENSES ===\n")
+
+# Calculate expense difficulty for each wave
+baseline_expenses <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(expenses_difficulty_b)) %>%
+  count(expenses_difficulty_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = expenses_difficulty_b, count_baseline = n, pct_baseline = percentage)
+
+midline_expenses <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(fin_expense_difficulty_m)) %>%
+  count(fin_expense_difficulty_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = fin_expense_difficulty_m, count_midline = n, pct_midline = percentage)
+
+endline_expenses <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(fin_expense_difficulty_e)) %>%
+  count(fin_expense_difficulty_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = fin_expense_difficulty_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+expenses_comparison <- full_join(baseline_expenses, midline_expenses, by = "response") %>%
+  full_join(endline_expenses, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+kable(expenses_comparison, 
+      col.names = c("Difficulty Level", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# Create stacked bar chart data
+plot_data_expenses <- expenses_comparison %>%
+  pivot_longer(cols = c(pct_baseline, pct_midline, pct_endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "pct_baseline" ~ "Baseline",
+    Wave == "pct_midline" ~ "Midline", 
+    Wave == "pct_endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline"))) %>%
+  filter(!is.na(Percentage) & !is.na(response)) %>%
+  # Clean up response labels
+  mutate(response_clean = case_when(
+    grepl("Very difficult", response, ignore.case = TRUE) ~ "Very Difficult",
+    grepl("Somewhat Difficult", response, ignore.case = TRUE) ~ "Somewhat Difficult",
+    grepl("A little difficult", response, ignore.case = TRUE) ~ "A little difficult",
+    grepl("Not at all difficult", response, ignore.case = TRUE) ~ "Not at all difficult",
+    TRUE ~ response
+  ))
+
+# Define colors for difficulty levels using UpTogether brand colors
+difficulty_colors <- c("Very Difficult" = "#D70073", 
+                      "Somewhat Difficult" = "#FF8C00",
+                      "A little difficult" = "#5E2D91",
+                      "Not at all difficult" = "#46214A")
+
+# Create stacked bar chart
+ggplot(plot_data_expenses, aes(x = Wave, y = Percentage, fill = response_clean)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = difficulty_colors) +
+  labs(
+    title = "Difficulty Paying Household Expenses Across Waves",
+    x = "Survey Wave",
+    y = "Percentage (%)",
+    fill = "Difficulty Level"
+  ) +
+  theme_larger_text +
+  theme(
+    plot.margin = margin(20, 20, 20, 20)
+  )
+```
+
+```{r, emp-fin}
+# Financial Emergency Trends Analysis
+cat("=== FINANCIAL EMERGENCY TRENDS ===\n")
+
+# Calculate financial emergency for each wave
+baseline_emergency <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(fin_emergency_b)) %>%
+  count(fin_emergency_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = fin_emergency_b, count_baseline = n, pct_baseline = percentage)
+
+midline_emergency <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(fin_emergency_fund_m)) %>%
+  count(fin_emergency_fund_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = fin_emergency_fund_m, count_midline = n, pct_midline = percentage)
+
+endline_emergency <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(fin_emergency_fund_e)) %>%
+  count(fin_emergency_fund_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = fin_emergency_fund_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+emergency_comparison <- full_join(baseline_emergency, midline_emergency, by = "response") %>%
+  full_join(endline_emergency, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("Financial Emergency Fund Trends:\n")
+kable(emergency_comparison, 
+      col.names = c("Emergency Fund Status", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# Extract key trend - focus on "Yes" responses (having emergency fund)
+emergency_yes <- emergency_comparison %>%
+  filter(grepl("Yes", response, ignore.case = TRUE)) %>%
+  summarise(
+    baseline = sum(pct_baseline, na.rm = TRUE),
+    midline = sum(pct_midline, na.rm = TRUE),
+    endline = sum(pct_endline, na.rm = TRUE)
+  )
+
+# Create line chart data
+line_data <- data.frame(
+  Wave = c("Baseline", "Midline", "Endline"),
+  Wave_num = c(1, 2, 3),
+  Percentage = c(emergency_yes$baseline, emergency_yes$midline, emergency_yes$endline)
+) %>%
+  filter(!is.na(Percentage))
+
+cat(sprintf("\nTrend Summary - %% with Emergency Fund:\n"))
+cat(sprintf("Baseline: %d%%\n", emergency_yes$baseline))
+cat(sprintf("Midline: %d%%\n", emergency_yes$midline))
+cat(sprintf("Endline: %d%%\n", emergency_yes$endline))
+
+if(emergency_yes$midline > emergency_yes$baseline) {
+  cat("📈 Improvement from baseline to midline!\n")
+}
+
+# Create line chart
+ggplot(line_data, aes(x = Wave_num, y = Percentage)) +
+  geom_line(color = "#46214A", size = 2) +
+  geom_point(color = "#D70073", size = 4) +
+  geom_text(aes(label = paste0(Percentage, "%")), 
+            vjust = -1.5, size = 5, fontface = "bold", color = "#46214A") +
+  labs(
+    title = "Financial Emergency Fund Trends",
+    subtitle = "Percentage of members with emergency funds",
+    x = "Survey Wave",
+    y = "Percentage (%)"
+  ) +
+  scale_x_continuous(breaks = c(1, 2, 3), labels = c("Baseline", "Midline", "Endline")) +
+  scale_y_continuous(limits = c(0, max(line_data$Percentage) * 1.2)) +
+  theme_larger_text +
+  theme(
+    plot.margin = margin(20, 20, 20, 20),
+    panel.grid.minor = element_blank()
+  )
+```
+
+## Childcare {.tabset}
+```{r, Childcare-1}
+# Childcare & School Year End Timing Analysis
+
+cat("=== CHILDCARE SITUATION AROUND SCHOOL YEAR END ===\n")
+cat("Endline timing: Around May 29 (school year ending in Austin)\n\n")
+
+# Check childcare situation trends - handle multiple selections properly
+cat("Childcare IMPROVEMENTS at endline (% mentioning each):\n")
+
+childcare_improvements <- c(
+  "More flexible or reliable" = "flexible.*reliable|reliable.*flexible",
+  "Better quality childcare" = "better quality",
+  "Found childcare for needed hours" = "hours and times I need",
+  "More support/resources" = "more support.*resources|more resources.*support",
+  "Other improvements" = "Other \\(please specify\\)"
+)
+
+improvement_results <- data.frame(
+  Improvement_Type = names(childcare_improvements),
+  Count = NA,
+  Percentage = NA
+)
+
+total_respondents <- sum(merged_data$participated_endline & !is.na(merged_data$childcare_better_e), na.rm = TRUE)
+
+for(i in 1:length(childcare_improvements)) {
+  pattern <- childcare_improvements[i]
+  count <- sum(grepl(pattern, merged_data$childcare_better_e, ignore.case = TRUE), na.rm = TRUE)
+  percentage <- round(count/total_respondents * 100, 0)
+  
+  improvement_results$Count[i] <- count
+  improvement_results$Percentage[i] <- percentage
+}
+
+kable(improvement_results, 
+      col.names = c("Improvement Type", "Count", "Percentage (%)"),
+      format = "simple")
+
+cat("\nChildcare CHALLENGES at endline (% mentioning each):\n")
+
+childcare_challenges <- c(
+  "Fewer options available" = "fewer.*options|fewer.*childcare",
+  "Higher costs" = "cost|expensive|price",
+  "Quality concerns" = "quality.*worse|poor quality",
+  "Scheduling issues" = "schedule|timing|hours",
+  "Other challenges" = "Other \\(please specify\\)"
+)
+
+challenge_results <- data.frame(
+  Challenge_Type = names(childcare_challenges),
+  Count = NA,
+  Percentage = NA
+)
+
+total_worse_respondents <- sum(merged_data$participated_endline & !is.na(merged_data$childcare_worse_e), na.rm = TRUE)
+
+for(i in 1:length(childcare_challenges)) {
+  pattern <- childcare_challenges[i]
+  count <- sum(grepl(pattern, merged_data$childcare_worse_e, ignore.case = TRUE), na.rm = TRUE)
+  percentage <- round(count/total_worse_respondents * 100, 0)
+  
+  challenge_results$Count[i] <- count
+  challenge_results$Percentage[i] <- percentage
+}
+
+kable(challenge_results, 
+      col.names = c("Challenge Type", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Highlight the summer care insight
+summer_care_issues <- challenge_results$Count[challenge_results$Challenge_Type == "Fewer options available"]
+if(summer_care_issues > 0) {
+  cat(sprintf("\n🏫 SCHOOL TIMING INSIGHT: %d person(s) reported fewer childcare options\n", summer_care_issues))
+  cat("This could indicate summer care transition challenges!\n")
+}
+
+# Check overall childcare arrangements
+childcare_arrangements <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(cc_arrangement_e)) %>%
+  count(cc_arrangement_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  arrange(desc(n))
+
+cat("\nCurrent childcare arrangements (endline):\n")
+kable(childcare_arrangements, 
+      col.names = c("Arrangement Type", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Check midline vs endline childcare comparison 
+if("childcare_better_m" %in% names(merged_data)) {
+  midline_better <- merged_data %>%
+    filter(participated_midline == TRUE & !is.na(childcare_better_m)) %>%
+    count(childcare_better_m) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+  
+  cat("\nComparison - Childcare BETTER:\n")
+  cat("Midline vs Endline trends\n")
+  # Note: This would need more detailed comparison code
+}
+```
+
+## Housing {.tabset}
+```{r, housing-1}
+# Housing Cost Burden Analysis
+cat("=== HOUSING COST BURDEN ANALYSIS ===\n")
+
+# Calculate housing burden for each wave 
+baseline_burden <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(housing_burden_b)) %>%
+  count(housing_burden_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = housing_burden_b, count_baseline = n, pct_baseline = percentage)
+
+midline_burden <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(house_burden_m)) %>%
+  count(house_burden_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = house_burden_m, count_midline = n, pct_midline = percentage)
+
+endline_burden <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(house_burden_e)) %>%
+  count(house_burden_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = house_burden_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+burden_comparison <- full_join(baseline_burden, midline_burden, by = "response") %>%
+  full_join(endline_burden, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("Housing Cost Burden Trends:\n")
+kable(burden_comparison, 
+      col.names = c("Cost Burden Level", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# === HOUSING PAYMENT DELAYS ===
+cat("\n=== HOUSING PAYMENT DELAYS ===\n")
+
+baseline_behind <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(housing_behind_b)) %>%
+  count(housing_behind_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = housing_behind_b, count_baseline = n, pct_baseline = percentage)
+
+midline_behind <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(house_payments_behind_m)) %>%
+  count(house_payments_behind_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = house_payments_behind_m, count_midline = n, pct_midline = percentage)
+
+endline_behind <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(house_payments_behind_e)) %>%
+  count(house_payments_behind_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = house_payments_behind_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+behind_comparison <- full_join(baseline_behind, midline_behind, by = "response") %>%
+  full_join(endline_behind, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("Housing Payment Delays:\n")
+kable(behind_comparison, 
+      col.names = c("Payment Status", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# === DISAGGREGATE BY HOUSING TYPE ===
+cat("\n=== HOUSING BURDEN BY HOUSING TYPE ===\n")
+
+# Clean housing situation categories
+clean_housing_type <- function(housing_var) {
+  case_when(
+    grepl("Own|own", housing_var, ignore.case = TRUE) ~ "Owners",
+    grepl("Rent|rent", housing_var, ignore.case = TRUE) ~ "Renters", 
+    grepl("Temporary|temporary|homeless", housing_var, ignore.case = TRUE) ~ "Homeless/Temporary",
+    TRUE ~ housing_var
+  )
+}
+
+# Baseline analysis by housing type
+baseline_disagg <- merged_data %>%
+  filter(participated_baseline == TRUE & !is.na(housing_burden_b) & !is.na(housing_situation_b)) %>%
+  mutate(housing_type = clean_housing_type(housing_situation_b)) %>%
+  group_by(housing_type, housing_burden_b) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(housing_type) %>%
+  mutate(percentage = round(count/sum(count)*100, 0)) %>%
+  ungroup()
+
+cat("Baseline housing burden by type:\n")
+baseline_summary <- baseline_disagg %>%
+  filter(grepl("30%|50%", housing_burden_b)) %>%
+  group_by(housing_type) %>%
+  summarise(
+    cost_burdened_30_pct = sum(percentage[grepl("30%", housing_burden_b)], na.rm = TRUE),
+    extreme_burden_50_pct = sum(percentage[grepl("50%", housing_burden_b)], na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+kable(baseline_summary, 
+      col.names = c("Housing Type", "Cost Burdened 30%+ (%)", "Extreme Burden 50%+ (%)"),
+      format = "simple")
+
+# Endline analysis by housing type
+endline_disagg <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(house_burden_e) & !is.na(house_status_e)) %>%
+  mutate(housing_type = clean_housing_type(house_status_e)) %>%
+  group_by(housing_type, house_burden_e) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(housing_type) %>%
+  mutate(percentage = round(count/sum(count)*100, 0)) %>%
+  ungroup()
+
+cat("\nEndline housing burden by type:\n")
+endline_summary <- endline_disagg %>%
+  filter(grepl("30%|50%", house_burden_e)) %>%
+  group_by(housing_type) %>%
+  summarise(
+    cost_burdened_30_pct = sum(percentage[grepl("30%", house_burden_e)], na.rm = TRUE),
+    extreme_burden_50_pct = sum(percentage[grepl("50%", house_burden_e)], na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+kable(endline_summary, 
+      col.names = c("Housing Type", "Cost Burdened 30%+ (%)", "Extreme Burden 50%+ (%)"),
+      format = "simple")
+
+# === VISUALIZATION ===
+# Create stacked bar chart for overall burden trends
+plot_data_burden <- burden_comparison %>%
+  pivot_longer(cols = c(pct_baseline, pct_midline, pct_endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "pct_baseline" ~ "Baseline",
+    Wave == "pct_midline" ~ "Midline", 
+    Wave == "pct_endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Baseline", "Midline", "Endline"))) %>%
+  filter(!is.na(Percentage) & !is.na(response)) %>%
+  # Clean and order the housing burden categories
+  mutate(burden_clean = case_when(
+    grepl("less than 30%|under 30%", response, ignore.case = TRUE) ~ "Less than 30%",
+    grepl("30.*50|30-50", response, ignore.case = TRUE) ~ "30-50%",
+    grepl("more than 50%|over 50%|50%.*more", response, ignore.case = TRUE) ~ "More than 50%",
+    TRUE ~ response
+  )) %>%
+  # Order the categories
+  mutate(burden_clean = factor(burden_clean, levels = c("Less than 30%", "30-50%", "More than 50%")))
+
+# Define colors for housing burden levels
+burden_colors <- c("Less than 30%" = "#46214A",    # Good - dark purple
+                  "30-50%" = "#FF8C00",            # Moderate - orange  
+                  "More than 50%" = "#D70073")     # High burden - pink
+
+ggplot(plot_data_burden, aes(x = Wave, y = Percentage, fill = burden_clean)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = burden_colors) +
+  labs(
+    title = "Housing Cost Burden Trends Across Waves",
+    x = "Survey Wave",
+    y = "Percentage (%)",
+    fill = "Cost Burden Level"
+  ) +
+  theme_larger_text +
+  theme(
+    plot.margin = margin(20, 20, 20, 20)
+  )
+```
+
+```{r, housing-2}
+# === HOUSING GOALS: BASELINE TO ENDLINE OUTCOMES ===
+cat("\n=== HOUSING GOALS ACHIEVEMENT ===\n")
+
+# Find people who had "covering ongoing housing costs" goal at baseline
+baseline_housing_goal_setters <- merged_data %>%
+  filter(participated_baseline == TRUE & !is.na(goals_house_b)) %>%
+  filter(grepl("Covering ongoing|ongoing.*costs|housing costs", goals_house_b, ignore.case = TRUE)) %>%
+  pull(entity_uuid)
+
+cat("People who had 'covering ongoing housing costs' goal at baseline:", length(baseline_housing_goal_setters), "\n")
+
+# Check their endline housing burden outcomes
+housing_goal_outcomes <- merged_data %>%
+  filter(entity_uuid %in% baseline_housing_goal_setters & 
+         participated_endline == TRUE & 
+         !is.na(house_burden_e)) %>%
+  count(house_burden_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0))
+
+cat("\nEndline housing burden for people who wanted to cover ongoing costs:\n")
+kable(housing_goal_outcomes,
+      col.names = c("Housing Burden", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Check their endline payment status
+payment_outcomes <- merged_data %>%
+  filter(entity_uuid %in% baseline_housing_goal_setters & 
+         participated_endline == TRUE & 
+         !is.na(house_payments_behind_e)) %>%
+  count(house_payments_behind_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0))
+
+cat("\nEndline payment status for people who wanted to cover ongoing costs:\n")
+kable(payment_outcomes,
+      col.names = c("Payment Status", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Sample sizes
+cat(sprintf("\nSample sizes:\n"))
+cat(sprintf("Baseline goal setters: %d\n", length(baseline_housing_goal_setters)))
+cat(sprintf("With endline burden data: %d\n", sum(housing_goal_outcomes$n)))
+cat(sprintf("With endline payment data: %d\n", sum(payment_outcomes$n)))
+```
+
+```{r, housing-individual}
+# === INDIVIDUAL HOUSING CHANGES ===
+cat("=== BIG HOUSING ACCOMPLISHMENTS ===\n")
+
+# === 1. HOME PURCHASES ===
+cat("1. HOME PURCHASES:\n")
+
+# Baseline to Midline home purchases (you mentioned 2 people)
+baseline_to_midline_purchases <- 2
+cat(sprintf("Baseline to Midline home purchases: %d people\n", baseline_to_midline_purchases))
+
+# Midline to Endline home purchases
+midline_to_endline_purchases <- merged_data %>%
+  filter(participated_midline == TRUE & participated_endline == TRUE) %>%
+  filter(!is.na(house_status_m) & !is.na(house_status_e)) %>%
+  mutate(
+    midline_owner = clean_housing_type(house_status_m) == "Owners",
+    endline_owner = clean_housing_type(house_status_e) == "Owners"
+  ) %>%
+  filter(!midline_owner & endline_owner) %>%  # Not owner at midline, owner at endline
+  nrow()
+
+cat(sprintf("Midline to Endline home purchases: %d people\n", midline_to_endline_purchases))
+
+total_purchases <- baseline_to_midline_purchases + midline_to_endline_purchases
+cat(sprintf("🏠 TOTAL HOME PURCHASES: %d people became homeowners!\n", total_purchases))
+
+# === 2. HOMELESSNESS TO HOUSING ===
+cat("\n2. HOMELESSNESS TO PERMANENT HOUSING:\n")
+
+# Find people experiencing homelessness at baseline
+baseline_homeless <- merged_data %>%
+  filter(participated_baseline == TRUE & participated_endline == TRUE) %>%
+  filter(!is.na(housing_situation_b) & !is.na(house_status_e)) %>%
+  mutate(
+    baseline_homeless = clean_housing_type(housing_situation_b) == "Homeless/Temporary",
+    endline_permanent = clean_housing_type(house_status_e) %in% c("Owners", "Renters")
+  ) %>%
+  filter(baseline_homeless)  # People who were homeless at baseline
+
+total_baseline_homeless <- nrow(baseline_homeless)
+cat(sprintf("People experiencing homelessness at baseline: %d\n", total_baseline_homeless))
+
+if(total_baseline_homeless > 0) {
+  # Check their endline housing status
+  homeless_outcomes <- baseline_homeless %>%
+    count(house_status_e) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+  
+  cat("\nEndline housing status for people who were homeless at baseline:\n")
+  kable(homeless_outcomes,
+        col.names = c("Endline Housing Status", "Count", "Percentage (%)"),
+        format = "simple")
+  
+  # Calculate success rate
+  housed_count <- baseline_homeless %>%
+    filter(endline_permanent) %>%
+    nrow()
+  
+  success_rate <- round(housed_count/total_baseline_homeless * 100, 0)
+  
+  cat(sprintf("\n🏠 HOUSING SUCCESS: %d out of %d (%d%%) moved from homelessness to permanent housing!\n", 
+              housed_count, total_baseline_homeless, success_rate))
+} else {
+  cat("No people experiencing homelessness at baseline in this sample.\n")
+}
+```
+
+```{r, house-moved}
+# === MOVING TRENDS ANALYSIS ===
+cat("=== MOVING TRENDS: POSITIVE VS NEGATIVE REASONS ===\n")
+
+# Check who moved in each wave
+baseline_movers <- merged_data %>%
+  filter(participated_baseline == TRUE & moved_last_year_b == "Yes") %>%
+  nrow()
+
+midline_movers <- merged_data %>%
+  filter(participated_midline == TRUE & house_moved_m == "Yes") %>%
+  nrow()
+
+endline_movers <- merged_data %>%
+  filter(participated_endline == TRUE & house_moved_e == "Yes") %>%
+  nrow()
+
+cat(sprintf("People who moved:\n"))
+cat(sprintf("Baseline: %d people\n", baseline_movers))
+cat(sprintf("Midline: %d people\n", midline_movers))
+cat(sprintf("Endline: %d people\n", endline_movers))
+
+# === POSITIVE MOVING REASONS ===
+cat("\n=== POSITIVE MOVING REASONS ===\n")
+
+# Baseline positive reasons (keep as is)
+baseline_positive <- merged_data %>%
+  filter(participated_baseline == TRUE & !is.na(move_reason_positive_b)) %>%
+  count(move_reason_positive_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  arrange(desc(n))
+
+cat("Positive Moving Reasons (Baseline):\n")
+kable(baseline_positive,
+      col.names = c("Positive Reason", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Midline positive reasons - handle multiple selections properly
+cat("\nPositive Moving Reasons (Midline):\n")
+midline_positive_options <- c(
+  "Moved to a better neighborhood",
+  "Bought a house", 
+  "Moved to closer to work or school",
+  "Other (please specify)",
+  "Upgraded to another accommodation"
+)
+
+midline_positive_results <- data.frame(
+  Positive_Reason = midline_positive_options,
+  Count = NA,
+  Percentage = NA
+)
+
+total_midline_respondents <- sum(merged_data$participated_midline & !is.na(merged_data$move_reason_positive_m), na.rm = TRUE)
+
+for(i in 1:length(midline_positive_options)) {
+  option <- midline_positive_options[i]
+  count <- sum(grepl(option, merged_data$move_reason_positive_m, fixed = TRUE), na.rm = TRUE)
+  percentage <- round(count/total_midline_respondents * 100, 0)
+  
+  midline_positive_results$Count[i] <- count
+  midline_positive_results$Percentage[i] <- percentage
+}
+
+kable(midline_positive_results,
+      col.names = c("Positive Reason", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Endline positive reasons - handle multiple selections properly
+cat("\nPositive Moving Reasons (Endline):\n")
+endline_positive_options <- c(
+  "Moved to a neighborhood that feels safer",
+  "Moved closer to supportive family or friends", 
+  "Moved to a better home (e.g., more space, newer construction, etc.)",
+  "Moved closer to work or school",
+  "Other (please specify)"
+)
+
+endline_positive_results <- data.frame(
+  Positive_Reason = endline_positive_options,
+  Count = NA,
+  Percentage = NA
+)
+
+total_endline_respondents <- sum(merged_data$participated_endline & !is.na(merged_data$move_reason_positive_e), na.rm = TRUE)
+
+for(i in 1:length(endline_positive_options)) {
+  option <- endline_positive_options[i]
+  count <- sum(grepl(option, merged_data$move_reason_positive_e, fixed = TRUE), na.rm = TRUE)
+  percentage <- round(count/total_endline_respondents * 100, 0)
+  
+  endline_positive_results$Count[i] <- count
+  endline_positive_results$Percentage[i] <- percentage
+}
+
+kable(endline_positive_results,
+      col.names = c("Positive Reason", "Count", "Percentage (%)"),
+      format = "simple")
+
+# === NEGATIVE MOVING REASONS ===
+cat("\n=== NEGATIVE MOVING REASONS ===\n")
+
+# Baseline negative reasons
+baseline_negative <- merged_data %>%
+  filter(participated_baseline == TRUE & !is.na(move_reason_negative_b)) %>%
+  count(move_reason_negative_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  arrange(desc(n))
+
+cat("Negative Moving Reasons (Baseline):\n")
+kable(baseline_negative,
+      col.names = c("Negative Reason", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Midline negative reasons - keep full selections
+midline_negative <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(move_reason_negative_m)) %>%
+  count(move_reason_negative_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  arrange(desc(n))
+
+cat("\nNegative Moving Reasons (Midline):\n")
+kable(midline_negative,
+      col.names = c("Negative Reason", "Count", "Percentage (%)"),
+      format = "simple")
+
+# Endline negative reasons - keep full selections
+endline_negative <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(move_reason_negative_e)) %>%
+  count(move_reason_negative_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  arrange(desc(n))
+
+cat("\nNegative Moving Reasons (Endline):\n")
+kable(endline_negative,
+      col.names = c("Negative Reason", "Count", "Percentage (%)"),
+      format = "simple")
+
+# === TREND SUMMARY ===
+cat("\n=== TREND SUMMARY ===\n")
+positive_trend <- c(nrow(baseline_positive), nrow(midline_positive_results), nrow(endline_positive_results))
+negative_trend <- c(nrow(baseline_negative), nrow(midline_negative), nrow(endline_negative))
+
+cat("Number of different positive reasons mentioned:\n")
+cat(sprintf("Baseline: %d | Midline: %d | Endline: %d\n", positive_trend[1], positive_trend[2], positive_trend[3]))
+
+cat("\nNumber of different negative reasons mentioned:\n")
+cat(sprintf("Baseline: %d | Midline: %d | Endline: %d\n", negative_trend[1], negative_trend[2], negative_trend[3]))
+
+if(positive_trend[3] > negative_trend[3]) {
+  cat("\n📈 POSITIVE TREND: More variety in positive moving reasons at endline\n")
+} else {
+  cat("\n📉 CHALLENGING TREND: More variety in negative moving reasons at endline\n")
+}
+```
+
+## Health and Well-being {.tabset}
+```{r, health}
+# === HEALTH & FOOD ANALYSIS ===
+cat("=== HEALTH PERCEPTION TRENDS ===\n")
+
+# Health perception across waves
+baseline_health <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(wb_health_perception_b)) %>%
+  count(wb_health_perception_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = wb_health_perception_b, count_baseline = n, pct_baseline = percentage)
+
+midline_health <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(wb_health_status_m)) %>%
+  count(wb_health_status_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = wb_health_status_m, count_midline = n, pct_midline = percentage)
+
+endline_health <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(wb_health_status_e)) %>%
+  count(wb_health_status_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = wb_health_status_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+health_comparison <- full_join(baseline_health, midline_health, by = "response") %>%
+  full_join(endline_health, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+kable(health_comparison, 
+      col.names = c("Health Status", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# === MENTAL HEALTH ANALYSIS ===
+cat("\n=== MENTAL HEALTH TRENDS ===\n")
+
+# Function to calculate depression/anxiety severity 
+calculate_mental_health <- function(data, wave_suffix) {
+  data %>%
+    mutate(
+      Anxiety = case_when(
+        get(paste0("wb_anxious_", wave_suffix)) == "Nearly every day" | 
+        get(paste0("wb_worry_", wave_suffix)) == "Nearly every day" ~ "Severe",
+        get(paste0("wb_anxious_", wave_suffix)) == "More than half the days" | 
+        get(paste0("wb_worry_", wave_suffix)) == "More than half the days" ~ "Moderate",
+        get(paste0("wb_anxious_", wave_suffix)) == "Several days" | 
+        get(paste0("wb_worry_", wave_suffix)) == "Several days" ~ "Mild",
+        TRUE ~ "None"
+      ),
+      Depression = case_when(
+        get(paste0("wb_interest_", wave_suffix)) == "Nearly every day" | 
+        get(paste0("wb_down_", wave_suffix)) == "Nearly every day" ~ "Severe",
+        get(paste0("wb_interest_", wave_suffix)) == "More than half the days" | 
+        get(paste0("wb_down_", wave_suffix)) == "More than half the days" ~ "Moderate",
+        get(paste0("wb_interest_", wave_suffix)) == "Several days" | 
+        get(paste0("wb_down_", wave_suffix)) == "Several days" ~ "Mild",
+        TRUE ~ "None"
+      )
+    )
+}
+# Calculate for each wave
+baseline_mental <- calculate_mental_health(merged_data, "b") %>%
+  filter(participated_baseline == TRUE) %>%
+  summarise(
+    wave = "Baseline",
+    anxiety_severe = round(sum(Anxiety == "Severe", na.rm = TRUE)/n()*100, 0),
+    anxiety_moderate = round(sum(Anxiety == "Moderate", na.rm = TRUE)/n()*100, 0),
+    depression_severe = round(sum(Depression == "Severe", na.rm = TRUE)/n()*100, 0),
+    depression_moderate = round(sum(Depression == "Moderate", na.rm = TRUE)/n()*100, 0)
+  )
+
+midline_mental <- calculate_mental_health(merged_data, "m") %>%
+  filter(participated_midline == TRUE) %>%
+  summarise(
+    wave = "Midline",
+    anxiety_severe = round(sum(Anxiety == "Severe", na.rm = TRUE)/n()*100, 0),
+    anxiety_moderate = round(sum(Anxiety == "Moderate", na.rm = TRUE)/n()*100, 0),
+    depression_severe = round(sum(Depression == "Severe", na.rm = TRUE)/n()*100, 0),
+    depression_moderate = round(sum(Depression == "Moderate", na.rm = TRUE)/n()*100, 0)
+  )
+
+endline_mental <- calculate_mental_health(merged_data, "e") %>%
+  filter(participated_endline == TRUE) %>%
+  summarise(
+    wave = "Endline",
+    anxiety_severe = round(sum(Anxiety == "Severe", na.rm = TRUE)/n()*100, 0),
+    anxiety_moderate = round(sum(Anxiety == "Moderate", na.rm = TRUE)/n()*100, 0),
+    depression_severe = round(sum(Depression == "Severe", na.rm = TRUE)/n()*100, 0),
+    depression_moderate = round(sum(Depression == "Moderate", na.rm = TRUE)/n()*100, 0)
+  )
+
+mental_health_trends <- bind_rows(baseline_mental, midline_mental, endline_mental)
+
+cat("Mental Health Severity Trends:\n")
+kable(mental_health_trends,
+      col.names = c("Wave", "Severe Anxiety (%)", "Moderate Anxiety (%)", 
+                    "Severe Depression (%)", "Moderate Depression (%)"),
+      format = "simple")
+
+cat("\nNote: There are a wide variety of factors outside of the fund that could be impacting these results\n")
+cat("(e.g., midline during holiday season, economic uncertainty, etc.)\n")
+
+# === INVESTMENT STRESS ANALYSIS ===
+cat("\n=== INVESTMENT-RELATED STRESS (ENDLINE) ===\n")
+
+investment_feelings <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(investment_feel_e)) %>%
+  count(investment_feel_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0))
+
+cat("Investment feelings:\n")
+kable(investment_feelings,
+      col.names = c("Investment Feeling", "Count", "Percentage (%)"),
+      format = "simple")
+
+if("investment_negative_e" %in% names(merged_data)) {
+  investment_negative <- merged_data %>%
+    filter(participated_endline == TRUE & !is.na(investment_negative_e)) %>%
+    count(investment_negative_e) %>%
+    mutate(percentage = round(n/sum(n)*100, 0))
+  
+  cat("\nNegative investment feelings:\n")
+  kable(investment_negative,
+        col.names = c("Negative Feeling", "Count", "Percentage (%)"),
+        format = "simple")
+}
+
+# === FOOD SECURITY TRENDS ===
+cat("\n=== FOOD SECURITY TRENDS ===\n")
+
+baseline_food <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(wb_food_enough_b)) %>%
+  count(wb_food_enough_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = wb_food_enough_b, count_baseline = n, pct_baseline = percentage)
+
+midline_food <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(wb_food_security_m)) %>%
+  count(wb_food_security_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = wb_food_security_m, count_midline = n, pct_midline = percentage)
+
+endline_food <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(wb_food_security_e)) %>%
+  count(wb_food_security_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = wb_food_security_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+food_comparison <- full_join(baseline_food, midline_food, by = "response") %>%
+  full_join(endline_food, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("Food Security Status Trends (4 categories):\n")
+kable(food_comparison, 
+      col.names = c("Food Security Status", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+```
+
+## Education {.tabset}
+```{r, edu}
+# === EDUCATION GOALS ACHIEVEMENT ===
+cat("=== EDUCATION GOALS ACHIEVEMENT ===\n")
+
+# Find people who had education goals at baseline OR midline
+baseline_ed_goal_setters <- merged_data %>%
+  filter(participated_baseline == TRUE & goals_ed_b == "Yes") %>%
+  pull(entity_uuid)
+
+midline_ed_goal_setters <- if("goals_ed_m" %in% names(merged_data)) {
+  merged_data %>%
+    filter(participated_midline == TRUE & goals_ed_m == "Yes") %>%
+    pull(entity_uuid)
+} else {
+  character()
+}
+
+all_ed_goal_setters <- unique(c(baseline_ed_goal_setters, midline_ed_goal_setters))
+
+cat("People who had education goals:\n")
+cat(sprintf("Baseline: %d people\n", length(baseline_ed_goal_setters)))
+cat(sprintf("Midline: %d people\n", length(midline_ed_goal_setters)))
+cat(sprintf("Total unique education goal setters: %d people\n", length(all_ed_goal_setters)))
+
+# Check their endline education outcomes
+education_outcomes <- merged_data %>%
+  filter(entity_uuid %in% all_ed_goal_setters & participated_endline == TRUE) %>%
+  filter(!is.na(edu_complete_e) | !is.na(edu_cert_prog_e)) %>%
+  mutate(
+    achieved_education = (edu_complete_e == "Yes" | edu_cert_prog_e == "Yes")
+  )
+
+total_with_endline_data <- nrow(education_outcomes)
+achieved_education <- sum(education_outcomes$achieved_education, na.rm = TRUE)
+success_rate <- round(achieved_education/total_with_endline_data * 100, 0)
+
+cat(sprintf("\nEducation goal outcomes:\n"))
+cat(sprintf("People with endline education data: %d\n", total_with_endline_data))
+cat(sprintf("Completed education or certificate program: %d\n", achieved_education))
+cat(sprintf("🎓 SUCCESS RATE: %d%% achieved their education goals!\n", success_rate))
+
+# Breakdown by type of achievement
+education_breakdown <- education_outcomes %>%
+  summarise(
+    completed_education = sum(edu_complete_e == "Yes", na.rm = TRUE),
+    completed_certificate = sum(edu_cert_prog_e == "Yes", na.rm = TRUE),
+    both = sum(edu_complete_e == "Yes" & edu_cert_prog_e == "Yes", na.rm = TRUE),
+    neither = sum(edu_complete_e != "Yes" & edu_cert_prog_e != "Yes", na.rm = TRUE)
+  )
+
+cat("\nBreakdown of education achievements:\n")
+achievement_summary <- data.frame(
+  Achievement_Type = c("Completed Education", "Completed Certificate Program", 
+                      "Completed Both", "No Completion"),
+  Count = c(education_breakdown$completed_education, 
+           education_breakdown$completed_certificate,
+           education_breakdown$both,
+           education_breakdown$neither),
+  Percentage = round(c(education_breakdown$completed_education, 
+                      education_breakdown$completed_certificate,
+                      education_breakdown$both,
+                      education_breakdown$neither) / total_with_endline_data * 100, 0)
+)
+
+kable(achievement_summary,
+      col.names = c("Achievement Type", "Count", "Percentage (%)"),
+      format = "simple")
+
+```
+
+## Debt {.tabset}
+```{r,}
+# === DEBT ANALYSIS ===
+cat("=== DEBT GOALS AND BUDGETING ===\n")
+
+# === 1. DEBT GOAL ACHIEVEMENT ===
+cat("1. DEBT GOAL ACHIEVEMENT:\n")
+
+# Find people who had debt goals at baseline OR midline
+baseline_debt_goal_setters <- merged_data %>%
+  filter(participated_baseline == TRUE & !is.na(goals_debt_b)) %>%
+  pull(entity_uuid)
+
+midline_debt_goal_setters <- if("goals_debt_m" %in% names(merged_data)) {
+  merged_data %>%
+    filter(participated_midline == TRUE & !is.na(goals_debt_m)) %>%
+    pull(entity_uuid)
+} else {
+  character()
+}
+
+all_debt_goal_setters <- unique(c(baseline_debt_goal_setters, midline_debt_goal_setters))
+
+cat(sprintf("People who had debt goals:\n"))
+cat(sprintf("Baseline: %d people\n", length(baseline_debt_goal_setters)))
+cat(sprintf("Midline: %d people\n", length(midline_debt_goal_setters)))
+cat(sprintf("Total unique debt goal setters: %d people\n", length(all_debt_goal_setters)))
+
+# Compare debt amounts for goal setters
+debt_changes <- merged_data %>%
+  filter(entity_uuid %in% all_debt_goal_setters & 
+         participated_endline == TRUE) %>%
+  select(entity_uuid, goals_debt_amount_b, debt_amount_e) %>%
+  filter(!is.na(goals_debt_amount_b) | !is.na(debt_amount_e))
+
+cat(sprintf("\nPeople with debt amount data: %d\n", nrow(debt_changes)))
+
+if(nrow(debt_changes) > 0) {
+  # Check what the debt amount data looks like
+  cat("Sample baseline debt amounts:\n")
+  baseline_sample <- debt_changes$goals_debt_amount_b[!is.na(debt_changes$goals_debt_amount_b)][1:5]
+  print(baseline_sample)
+  
+  cat("\nSample endline debt amounts:\n") 
+  endline_sample <- debt_changes$debt_amount_e[!is.na(debt_changes$debt_amount_e)][1:5]
+  print(endline_sample)
+  
+  # Count people with both baseline and endline data
+  both_data_count <- sum(!is.na(debt_changes$goals_debt_amount_b) & !is.na(debt_changes$debt_amount_e))
+  cat(sprintf("\nPeople with both baseline and endline debt data: %d\n", both_data_count))
+  
+  # Show the actual responses instead of trying to calculate averages
+  if(both_data_count > 0) {
+    comparison_data <- debt_changes %>%
+      filter(!is.na(goals_debt_amount_b) & !is.na(debt_amount_e)) %>%
+      select(goals_debt_amount_b, debt_amount_e)
+    
+    cat("\nDebt amount changes (first 10 cases):\n")
+    kable(head(comparison_data, 10),
+          col.names = c("Baseline Debt Goal", "Endline Debt Amount"),
+          format = "simple")
+  }
+}
+
+# === 2. BUDGETING EASE FOR EVERYONE ===
+cat("\n2. BUDGETING EASE (ALL RESPONDENTS):\n")
+
+# Baseline: expenses_difficulty_b
+baseline_budget <- merged_data %>% 
+  filter(participated_baseline == TRUE & !is.na(expenses_difficulty_b)) %>%
+  count(expenses_difficulty_b) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = expenses_difficulty_b, count_baseline = n, pct_baseline = percentage)
+
+# Midline: fin_expense_difficulty_m  
+midline_budget <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(fin_expense_difficulty_m)) %>%
+  count(fin_expense_difficulty_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = fin_expense_difficulty_m, count_midline = n, pct_midline = percentage)
+
+# Endline: fin_expense_difficulty_e (comparable to baseline/midline)
+endline_budget <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(fin_expense_difficulty_e)) %>%
+  count(fin_expense_difficulty_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = fin_expense_difficulty_e, count_endline = n, pct_endline = percentage)
+
+# Create comparison table
+budget_comparison <- full_join(baseline_budget, midline_budget, by = "response") %>%
+  full_join(endline_budget, by = "response") %>%
+  select(response, pct_baseline, pct_midline, pct_endline)
+
+cat("Expense Difficulty Trends (comparable across waves):\n")
+kable(budget_comparison, 
+      col.names = c("Expense Difficulty", "Baseline (%)", "Midline (%)", "Endline (%)"),
+      format = "simple")
+
+# Also show the budget change question from endline
+cat("\n=== ENDLINE: BUDGET CHANGE OVER TIME ===\n")
+budget_change <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(budget_easy_hard_e)) %>%
+  count(budget_easy_hard_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0))
+
+cat("Has budgeting become easier or harder?\n")
+kable(budget_change,
+      col.names = c("Budget Change", "Count", "Percentage (%)"),
+      format = "simple")
+
+# === 3. DEBT STATUS FOR EVERYONE ===
+cat("\n3. OVERALL DEBT STATUS (ENDLINE):\n")
+
+debt_status <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(debt_e)) %>%
+  count(debt_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0))
+
+cat("Current debt status:\n")
+kable(debt_status,
+      col.names = c("Has Debt", "Count", "Percentage (%)"),
+      format = "simple")
+
+```
+
+## Use of Cash Investment and spending priorities {.tabset}
+```{r, cashinv-1}
+# === CASH INVESTMENT USE ANALYSIS ===
+cat("=== HOW MEMBERS USED THEIR CASH INVESTMENT ===\n")
+
+# === CASH INVESTMENT USE ANALYSIS ===
+cat("=== HOW MEMBERS USED THEIR CASH INVESTMENT ===\n")
+
+# Define categories
+fund_categories <- c(
+  "Housing expenses (e.g., rent or mortgage, utilities)",
+  "Daily living needs (e.g., food, clothing, household items)", 
+  "Transportation (e.g., car repairs, gas)",
+  "Debt and financial management (e.g., paying off debt, savings, investments)",
+  "Family caregiving (e.g., child/elder/family care)",
+  "Leisure and Personal Well-being (e.g., hobbies, recreation, therapy, self-care)",
+  "Education and/or professional development (e.g., school or training)"
+)
+
+# Clean category names for display
+category_names <- c(
+  "Housing Expenses",
+  "Daily Living Needs", 
+  "Transportation",
+  "Debt & Financial Management",
+  "Family Caregiving",
+  "Leisure & Well-being",
+  "Education & Professional Development"
+)
+
+# === MIDLINE ANALYSIS ===
+midline_results <- data.frame(
+  Category = category_names,
+  Count_Midline = NA,
+  Percentage_Midline = NA
+)
+
+total_midline_respondents <- sum(merged_data$participated_midline & !is.na(merged_data$impact_fund_receive_m), na.rm = TRUE)
+
+for(i in 1:length(fund_categories)) {
+  category <- fund_categories[i]
+  count <- sum(grepl(category, merged_data$impact_fund_receive_m, fixed = TRUE), na.rm = TRUE)
+  percentage <- round(count/total_midline_respondents * 100, 0)
+  
+  midline_results$Count_Midline[i] <- count
+  midline_results$Percentage_Midline[i] <- percentage
+}
+
+# === ENDLINE ANALYSIS ===
+endline_results <- data.frame(
+  Category = category_names,
+  Count_Endline = NA,
+  Percentage_Endline = NA
+)
+
+total_endline_respondents <- sum(merged_data$participated_endline & !is.na(merged_data$impact_fund_receive_e), na.rm = TRUE)
+
+for(i in 1:length(fund_categories)) {
+  category <- fund_categories[i]
+  count <- sum(grepl(category, merged_data$impact_fund_receive_e, fixed = TRUE), na.rm = TRUE)
+  percentage <- round(count/total_endline_respondents * 100, 0)
+  
+  endline_results$Count_Endline[i] <- count
+  endline_results$Percentage_Endline[i] <- percentage
+}
+
+# === COMBINED RESULTS ===
+combined_results <- merge(midline_results, endline_results, by = "Category")
+
+cat("Fund Use by Category - Midline vs Endline:\n")
+kable(combined_results,
+      col.names = c("Category", "Midline Count", "Midline (%)", "Endline Count", "Endline (%)"),
+      format = "simple")
+
+# === VISUALIZATION ===
+# Reshape data for plotting
+plot_data <- combined_results %>%
+  select(Category, Percentage_Midline, Percentage_Endline) %>%
+  pivot_longer(cols = c(Percentage_Midline, Percentage_Endline),
+               names_to = "Wave", 
+               values_to = "Percentage") %>%
+  mutate(Wave = case_when(
+    Wave == "Percentage_Midline" ~ "Midline",
+    Wave == "Percentage_Endline" ~ "Endline"
+  )) %>%
+  mutate(Wave = factor(Wave, levels = c("Midline", "Endline")))
+
+# Create comparison bar chart
+ggplot(plot_data, aes(x = reorder(Category, Percentage), y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  scale_fill_manual(values = c("Midline" = "#D70073", "Endline" = "#FF8C00")) +
+  labs(
+    title = "How Members Used Their Cash Investment",
+    subtitle = "Midline vs Endline Comparison",
+    x = "",
+    y = "Percentage (%)",
+    fill = "Survey Wave",
+    caption = "Multiple responses allowed"
+  ) +
+  theme_larger_text +
+  theme(
+    plot.margin = margin(20, 20, 20, 20),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 9)
+  )
+
+# === SUMMARY ===
+cat(sprintf("\n=== KEY TAKEAWAYS ===\n"))
+cat(sprintf("Sample sizes:\n"))
+cat(sprintf("Midline: %d respondents\n", total_midline_respondents))
+cat(sprintf("Endline: %d respondents\n", total_endline_respondents))
+
+daily_living_midline <- combined_results$Percentage_Midline[combined_results$Category == "Daily Living Needs"]
+daily_living_endline <- combined_results$Percentage_Endline[combined_results$Category == "Daily Living Needs"]
+housing_midline <- combined_results$Percentage_Midline[combined_results$Category == "Housing Expenses"]
+housing_endline <- combined_results$Percentage_Endline[combined_results$Category == "Housing Expenses"]
+
+cat(sprintf("\nTop uses:\n"))
+cat(sprintf("Daily Living Needs: %d%% (Midline) vs %d%% (Endline)\n", daily_living_midline, daily_living_endline))
+cat(sprintf("Housing Expenses: %d%% (Midline) vs %d%% (Endline)\n", housing_midline, housing_endline))
+cat("\n📊 Almost everyone used funds for basic needs (housing + daily living)\n")
+```
+
+```{r, cashinv-2}
+
+# === RIPPLE EFFECTS ANALYSIS ===
+cat("=== RIPPLE EFFECTS: FAMILY & COMMUNITY IMPACT ===\n")
+
+# Midline family ripple effects
+midline_family <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(ripple_fam_select_m)) %>%
+  count(ripple_fam_select_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = ripple_fam_select_m, count_midline = n, pct_midline = percentage)
+
+# Endline family ripple effects
+endline_family <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(ripple_fam_select_e)) %>%
+  count(ripple_fam_select_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = ripple_fam_select_e, count_endline = n, pct_endline = percentage)
+
+# Midline community ripple effects
+midline_community <- merged_data %>%
+  filter(participated_midline == TRUE & !is.na(ripple_comm_select_m)) %>%
+  count(ripple_comm_select_m) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = ripple_comm_select_m, count_midline = n, pct_midline = percentage)
+
+# Endline community ripple effects
+endline_community <- merged_data %>%
+  filter(participated_endline == TRUE & !is.na(ripple_comm_select_e)) %>%
+  count(ripple_comm_select_e) %>%
+  mutate(percentage = round(n/sum(n)*100, 0)) %>%
+  rename(response = ripple_comm_select_e, count_endline = n, pct_endline = percentage)
+
+# Family comparison
+family_comparison <- full_join(midline_family, endline_family, by = "response") %>%
+  select(response, pct_midline, pct_endline)
+
+# Community comparison
+community_comparison <- full_join(midline_community, endline_community, by = "response") %>%
+  select(response, pct_midline, pct_endline)
+
+cat("Family support comparison:\n")
+kable(family_comparison, col.names = c("Helped Family", "Midline (%)", "Endline (%)"), format = "simple")
+
+cat("\nCommunity support comparison:\n")
+kable(community_comparison, col.names = c("Helped Community", "Midline (%)", "Endline (%)"), format = "simple")
+
+# Visualization
+ripple_plot_data <- data.frame(
+  Ripple_Type = c("Family Support", "Family Support", "Community Support", "Community Support"),
+  Wave = c("Midline", "Endline", "Midline", "Endline"),
+  Percentage = c(
+    family_comparison$pct_midline[family_comparison$response == "Yes"],
+    family_comparison$pct_endline[family_comparison$response == "Yes"],
+    community_comparison$pct_midline[community_comparison$response == "Yes"],
+    community_comparison$pct_endline[community_comparison$response == "Yes"]
+  )
+) %>%
+  mutate(Wave = factor(Wave, levels = c("Midline", "Endline")))
+
+ggplot(ripple_plot_data, aes(x = Ripple_Type, y = Percentage, fill = Wave)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = paste0(Percentage, "%")), 
+            position = position_dodge(width = 0.9), vjust = -0.5, size = 4, fontface = "bold") +
+  scale_fill_manual(values = c("Midline" = "#D70073", "Endline" = "#FF8C00")) +
+  labs(title = "Ripple Effects: Midline vs Endline Comparison",
+       subtitle = "Members helping family and community over time",
+       x = "", y = "Percentage (%)", fill = "Survey Wave") +
+  theme_minimal()
+
+# Key insights
+family_mid <- family_comparison$pct_midline[family_comparison$response == "Yes"]
+family_end <- family_comparison$pct_endline[family_comparison$response == "Yes"]
+comm_mid <- community_comparison$pct_midline[community_comparison$response == "Yes"]
+comm_end <- community_comparison$pct_endline[community_comparison$response == "Yes"]
+
+cat("\n=== KEY RIPPLE EFFECT TRENDS ===\n")
+cat(sprintf("Family Support: %d%% (Midline) → %d%% (Endline)\n", family_mid, family_end))
+cat(sprintf("Community Support: %d%% (Midline) → %d%% (Endline)\n", comm_mid, comm_end))
+cat("\nThe investment created sustained positive ripple effects!\n")
+```
+
