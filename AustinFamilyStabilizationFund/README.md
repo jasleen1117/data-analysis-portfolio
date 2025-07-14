@@ -4,6 +4,7 @@
 Analysis of the impact of unconditional cash transfers on low-income households in Austin, Texas, U.S
 
 ## Files in this folder: 
+
 -`1a_cleaning_midline.R` - Data cleaning script for midline survey data 
 - `1b_cleaning_endline.R` - Data cleaning script for endline survey data 
 - `1c_merging_baseline_midline_endline.R` - Script to merge baseline, midline, and endline datasets 
@@ -28,8 +29,8 @@ After 6 months of grants, members report improved financial stability, employmen
 - The grants are helping members progress on housing goals, especially around moving, and catching up on housing payments. 44% of those who were behind on rent or mortgage payments at the start of the grants have now caught up. 2 members bought a house!
 - Members report feeling stronger relationships with their community and they have been providing more frequent support, both monetary and non-monetary. The grants have had a ripple effect as members support their family, friends, and neighbors with basic needs. 
 
-##Survey Variables 
-Table of Contents
+## Survey Variables 
+
 * Identifier & Demographics
 * Income & Employment
 * Housing & Living Situation
