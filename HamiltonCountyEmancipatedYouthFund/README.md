@@ -1,12 +1,12 @@
-# Hamilton County Emancipated Youth Emancipated - Longitudinal Analysis
+# Hamilton County Emancipated Youth Fund - Longitudinal Analysis
 
 ## Project Overview
-Analysis of the impact of unconditional cash transfers on youth who were emancipated from the foster system. 
+Analysis of the impact of unconditional cash transfers on youth who were emancipated from the foster system in Hamilton County.
 
-## Interactive Reports (Click to View)
-- **[📊 Midline Descriptive Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/HamiltonCountyEmancipatedYouthFund/2a.%20Markdown_MidlineDescriptives.html)** - Interactive HTML report with comprehensive descriptive statistics
-- **[📈 Baseline-Midline Longitudinal Analysis](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/HamiltonCountyEmancipatedYouthFund/2b.%20Markdown_LongitudinalAnalysis.html)** - Complete longitudinal analysis with causal inference
-- **[📄 Policy Report (PDF)](https://github.com/jasleen1117/data-analysis-portfolio/blob/main/HamiltonCountyEmancipatedYouthFund/3.%20PolicyReport.pdf)** - Executive summary for Hamilton County stakeholders
+## Interactive Reports (Click to View Live)
+- **[📊 Midline Descriptive Analysis](https://jasleen1117.github.io/data-analysis-portfolio/HamiltonCountyEmancipatedYouthFund/2a.%20Markdown_MidlineDescriptives.html)** - Interactive HTML report with comprehensive descriptive statistics
+- **[📈 Baseline-Midline Longitudinal Analysis](https://jasleen1117.github.io/data-analysis-portfolio/HamiltonCountyEmancipatedYouthFund/2b.%20Markdown_LongitudinalAnalysis.html)** - Complete longitudinal analysis with causal inference
+- **[📄 Policy Report (PDF)](https://jasleen1117.github.io/data-analysis-portfolio/HamiltonCountyEmancipatedYouthFund/3.%20PolicyReport.pdf)** - Executive summary for Hamilton County stakeholders
 
 ## Source Code Files
 - `1. Descriptives_Midline.Rmd` - Descriptive statistics and exploratory analysis for midline survey data
@@ -21,19 +21,29 @@ Analysis of the impact of unconditional cash transfers on youth who were emancip
 - `README.md` - This file with project documentation
 
 ## Key Methods
-- Longitudinal data analysis
-- Advanced data visualization in R
+- Baseline-midline longitudinal analysis design
+- Statistical modeling for program impact evaluation
+- Advanced data visualization and reporting in R
+- Policy-focused analysis with actionable recommendations
 
-# Data Information 
-## Data Sources 
+## Data Information 
+
+### Data Sources 
 - Hamilton County Emancipated Youth Fund Baseline and Midline Survey Data 
 
-## Data Characteristics 
-- Sample size: 53 households.
-- Variables Subgroups: 
+### Data Characteristics 
+- Sample size: 53 households
+- Time period: Baseline to midline analysis
+
+### Variable Subgroups: 
 * Work & Employment
 * Housing & Living Situation
 * Education
 * Healthcare
 * Program Impact & Feedback
 
+### Note on Data Access
+Raw data files are not included in this repository due to privacy and confidentiality requirements. The analysis code demonstrates the methodological approach and can be adapted for similar datasets studying outcomes for emancipated youth populations.
+
+## Results
+This analysis provides Hamilton County with evidence-based insights on program effectiveness for supporting emancipated youth, with specific recommendations for program improvements and policy adjustments.
