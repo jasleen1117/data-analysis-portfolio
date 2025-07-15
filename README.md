@@ -2,6 +2,7 @@
 
 ## About Me
 PhD in Public Policy from UT Austin with expertise in causal inference, impact evaluation, and survey methodology. Currently conducting longitudinal analysis of cash transfer programs at Uptogether. Advanced skills in R programming, experimental design, and translating complex analyses into policy recommendations.
+- Website: https://www.kaurjasleen.com
 
 ## Technical Skills
 - **Programming**: R (advanced), STATA (advanced)
